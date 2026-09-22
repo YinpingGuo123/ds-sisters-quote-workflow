@@ -1,0 +1,40 @@
+# Business pricing policy - deterministic guardrails and standard discount
+# rules (never the LLM's call). Loaded and validated by
+# pricing_agent.pricing.policy.load_policy(); the pricing engine applies it.
+#
+# These are *rules*, not records, which is why they live in YAML next to the
+# code rather than in a CSV/SQLite table like customers or products.
+
+# Policy-wide defaults, used only for a customer segment with no row under
+# `segments` below:
+#   price_floor = cost_price / (1 - min_margin_pct / 100)
+#   max_auto_discount_pct = largest discount off list approvable without escalation
+minimum_margin_pct: 15.0
+max_auto_discount_pct: 20.0
+
+# Standard volume ladder - the highest tier whose min_quantity is met applies.
+# Only used when no special deal applies (a negotiated deal replaces standard
+# discounts, it does not stack with them).
+volume_discounts:
+  - {min_quantity: 50,  discount_pct: 3.0}
+  - {min_quantity: 100, discount_pct: 6.0}
+  - {min_quantity: 250, discount_pct: 10.0}
+
+# Standard contract-term ladder - same rule: highest tier met applies, and
+# only when no special deal applies.
+term_discounts:
+  - {min_contract_months: 12, discount_pct: 2.0}
+  - {min_contract_months: 24, discount_pct: 4.0}
+
+# Per-segment guardrails. Lookup picks the most specific match: a row with
+# both customer_category and customer_tier beats a category-only row, which
+# beats the defaults above. max_auto_discount_pct is the largest discount off
+# list price that can be approved without escalation.
+segments:
+  - {customer_category: Retail Chain, customer_tier: strategic, min_margin_pct: 12.0, max_auto_discount_pct: 20.0}
+  - {customer_category: Retail Chain,                           min_margin_pct: 15.0, max_auto_discount_pct: 15.0}
+  - {customer_category: Reseller,                               min_margin_pct: 18.0, max_auto_discount_pct: 10.0}
+
+# Stamped on every PricingDecision (policy_version) so a stored case says which
+# rules priced it. Bump when any number above changes.
+version: "2026.09-v1"

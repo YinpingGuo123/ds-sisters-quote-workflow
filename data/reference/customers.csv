@@ -1,0 +1,13 @@
+customer_id,customer_name,customer_category,buying_group,credit_limit,customer_tier
+1,Tailspin Toys (Head Office),Retail Chain,Tailspin Toys,5000,strategic
+2,"Tailspin Toys (Bow Mar, CO)",Retail Chain,Tailspin Toys,3000,preferred
+3,"Tailspin Toys (Avenal, CA)",Retail Chain,Tailspin Toys,3500,preferred
+4,"Tailspin Toys (Hambleton, WV)",Retail Chain,Tailspin Toys,2500,preferred
+5,Wingtip Toys (Head Office),Retail Chain,Wingtip Toys,4500,strategic
+6,"Wingtip Toys (Bethel Acres, OK)",Retail Chain,Wingtip Toys,3000,preferred
+7,"Wingtip Toys (Mount Summit, IN)",Retail Chain,Wingtip Toys,2800,preferred
+8,Eric Torres,Reseller,,2000,standard
+9,Jayanta Thakur,Reseller,,1500,standard
+10,Philip Walker,Reseller,,2500,standard
+11,Emily Whittle,Reseller,,1000,standard
+12,Krishnam Allu,Reseller,,0,standard

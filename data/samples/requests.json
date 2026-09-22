@@ -1,0 +1,104 @@
+[
+  {
+    "id": "standard-quote",
+    "title": "Standard quote - reseller, list price",
+    "what_to_look_for": "No deal, no ladder tier: approved at list price $30.00; levers show the next volume/term tiers.",
+    "request": {
+      "customer_name": "Philip Walker",
+      "billing_address": {"name": "Philip Walker", "line1": "418 Cedar Lane", "city": "Boise", "region": "ID", "postal_code": "83702", "country": "US"},
+      "shipping_address": {"name": "Philip Walker", "line1": "418 Cedar Lane", "city": "Boise", "region": "ID", "postal_code": "83702", "country": "US"},
+      "requested_delivery_date": "2026-10-15",
+      "lines": [{"product_name": "Superhero action jacket (Blue) M", "quantity": 10}]
+    }
+  },
+  {
+    "id": "buying-group-deal",
+    "title": "Buying-group deal - Tailspin branch inherits 8% on the DBA mug",
+    "what_to_look_for": "A branch store inherits its buying group's deal (deal #2): approved at $11.96.",
+    "request": {
+      "customer_name": "Tailspin Toys (Hambleton, WV)",
+      "billing_address": {"name": "Tailspin Toys (Head Office)", "line1": "1200 Aviator Way", "city": "Denver", "region": "CO", "postal_code": "80202", "country": "US"},
+      "shipping_address": {"name": "Tailspin Toys (Hambleton, WV)", "line1": "77 Main Street", "city": "Hambleton", "region": "WV", "postal_code": "26269", "country": "US"},
+      "requested_delivery_date": "2026-10-20",
+      "lines": [{"product_name": "DBA joke mug - SELECT caffeine FROM mug (Black)", "quantity": 35}]
+    }
+  },
+  {
+    "id": "term-discount",
+    "title": "Volume + term ladders - 120 units on a 24-month contract",
+    "what_to_look_for": "Reseller with no deal: 6% volume (100+) and 4% term (24 months) stack to 10% off list: $27.00.",
+    "request": {
+      "customer_name": "Philip Walker",
+      "contract_months": 24,
+      "billing_address": {"name": "Philip Walker", "line1": "418 Cedar Lane", "city": "Boise", "region": "ID", "postal_code": "83702", "country": "US"},
+      "shipping_address": {"name": "Philip Walker - Warehouse", "line1": "9 Industrial Park Rd", "city": "Nampa", "region": "ID", "postal_code": "83687", "country": "US"},
+      "lines": [{"product_name": "Superhero action jacket (Blue) M", "quantity": 120}]
+    }
+  },
+  {
+    "id": "below-floor",
+    "title": "Request below the margin floor - counter recommended",
+    "what_to_look_for": "$12 on an $11 cost breaks the 18% reseller floor: counter_recommended at the best auto-approvable price.",
+    "request": {
+      "customer_name": "Eric Torres",
+      "billing_address": {"name": "Eric Torres", "line1": "302 Harbor Blvd", "city": "Tampa", "region": "FL", "postal_code": "33602", "country": "US"},
+      "shipping_address": {"name": "Eric Torres", "line1": "302 Harbor Blvd", "city": "Tampa", "region": "FL", "postal_code": "33602", "country": "US"},
+      "requested_delivery_date": "2026-10-05",
+      "source_text": "Hi, Eric Torres here. We need 10 of the Office cube periscope (Black) at $12 each. Ship to our Tampa address.",
+      "lines": [{"product_name": "Office cube periscope (Black)", "quantity": 10, "requested_unit_price": 12.0}]
+    }
+  },
+  {
+    "id": "contract-below-floor",
+    "title": "Contractual deal below the floor - honored but escalated",
+    "what_to_look_for": "Deal #11 gives 70% off: the contract price $9.60 is honored, not clamped, and the line escalates.",
+    "request": {
+      "customer_name": "Tailspin Toys (Avenal, CA)",
+      "billing_address": {"name": "Tailspin Toys (Head Office)", "line1": "1200 Aviator Way", "city": "Denver", "region": "CO", "postal_code": "80202", "country": "US"},
+      "shipping_address": {"name": "Tailspin Toys (Avenal, CA)", "line1": "510 Kings Street", "city": "Avenal", "region": "CA", "postal_code": "93204", "country": "US"},
+      "lines": [{"product_name": "Dinosaur battery-powered slippers (Green) L", "quantity": 10}]
+    }
+  },
+  {
+    "id": "multi-line-program",
+    "title": "Multi-line 12-month program with a competitor price",
+    "what_to_look_for": "Three lines; the launcher gets deal #1, the periscope the Retail Chain category deal, and the mug line's $10 ask exceeds the strategic cap: the quote status is the worst line.",
+    "request": {
+      "customer_name": "Tailspin Toys (Head Office)",
+      "contract_months": 12,
+      "billing_address": {"name": "Tailspin Toys (Head Office)", "line1": "1200 Aviator Way", "city": "Denver", "region": "CO", "postal_code": "80202", "country": "US"},
+      "shipping_address": {"name": "Tailspin Toys Distribution Center", "line1": "4400 Cargo Road", "city": "Aurora", "region": "CO", "postal_code": "80011", "country": "US"},
+      "requested_delivery_date": "2026-11-01",
+      "source_text": "Hi, Tailspin HQ here. We need 100 launchers, 50 periscopes and 200 of the DBA mugs for a 12-month program. We've been offered the mugs at $10 elsewhere, can you match? Thanks, Dana",
+      "notes": "Customer mentions a competing offer on the mugs.",
+      "lines": [
+        {"product_name": "USB missile launcher (Green)", "quantity": 100},
+        {"product_name": "Office cube periscope (Black)", "quantity": 50},
+        {"product_name": "DBA joke mug - SELECT caffeine FROM mug (Black)", "quantity": 200, "requested_unit_price": 10.0}
+      ]
+    }
+  },
+  {
+    "id": "missing-shipping-address",
+    "title": "Priceable but not quotable - shipping address missing",
+    "what_to_look_for": "Everything resolves, but there is no shipping address: the case waits in NEEDS_INFO rather than being priced.",
+    "request": {
+      "customer_name": "Emily Whittle",
+      "billing_address": {"name": "Emily Whittle", "line1": "12 Orchard Way", "city": "Portland", "region": "OR", "postal_code": "97205", "country": "US"},
+      "clarification_questions": ["Where should the order ship to?"],
+      "lines": [{"product_name": "USB missile launcher (Green)", "quantity": 10}]
+    }
+  },
+  {
+    "id": "unknown-product",
+    "title": "Unknown product - nothing is fabricated",
+    "what_to_look_for": "No catalog product matches 'Deluxe Rocket Backpack': the line is not_found and the case is NEEDS_INFO.",
+    "request": {
+      "customer_name": "Tailspin Toys (Head Office)",
+      "billing_address": {"name": "Tailspin Toys (Head Office)", "line1": "1200 Aviator Way", "city": "Denver", "region": "CO", "postal_code": "80202", "country": "US"},
+      "shipping_address": {"name": "Tailspin Toys (Head Office)", "line1": "1200 Aviator Way", "city": "Denver", "region": "CO", "postal_code": "80202", "country": "US"},
+      "source_text": "Hello, this is Tailspin Toys (Head Office). We'd like to order 5 units of the Deluxe Rocket Backpack. Thanks.",
+      "lines": [{"product_name": "Deluxe Rocket Backpack", "quantity": 5}]
+    }
+  }
+]

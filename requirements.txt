@@ -1,0 +1,14 @@
+# Runtime dependencies for Streamlit Community Cloud (which installs from this
+# file, not from pyproject.toml's extras). Locally use
+# `pip install -e ".[dev,llm,observability,ui]"`; pyproject.toml is the source of truth.
+pydantic>=2.6
+pyyaml>=6.0
+openai>=1.50
+langfuse>=4.15,<5
+python-dotenv>=1.0
+truststore>=0.9
+streamlit>=1.50
+pandas>=2.0
+
+# The repo's own package, so `import quote_workflow` works on Cloud.
+-e .
