@@ -90,3 +90,16 @@ The catalog (customer and product names, list prices) is derived from Microsoft'
 WideWorldImporters sample; tiers, costs, aliases, deals and sales history are
 hand-authored to exercise specific pricing scenarios. Addresses in the sample
 requests are fictional. See the POC's README for provenance details.
+
+## Evaluate
+
+python scripts/run_eval.py
+
+The offline golden evaluation builds temporary SQLite databases, fixes the pricing
+date at 2026-09-24 and disables the LLM. It compares eight structured requests
+against hand-calculated case statuses, pricing statuses, line prices, totals,
+and required warnings or missing fields. It prints mismatches and exits with
+status 1 if any case fails. Golden expectations live in data/eval/golden_cases.json;
+review policy and catalog changes before updating them. This runner evaluates
+the structured-request workflow; raw-email extraction and LLM summary quality
+need their own datasets when those integrations are ready.
