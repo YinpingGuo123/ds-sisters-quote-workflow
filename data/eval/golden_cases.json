@@ -1,0 +1,10 @@
+[
+  {"id": "standard-quote", "case_status": "ready_for_review", "pricing_status": "approved", "total": 300.00, "lines": [{"status": "approved", "unit_price": 30.00}]},
+  {"id": "buying-group-deal", "case_status": "ready_for_review", "pricing_status": "approved", "total": 418.60, "lines": [{"status": "approved", "unit_price": 11.96}]},
+  {"id": "term-discount", "case_status": "ready_for_review", "pricing_status": "approved", "total": 3240.00, "lines": [{"status": "approved", "unit_price": 27.00}]},
+  {"id": "below-floor", "case_status": "ready_for_review", "pricing_status": "counter_recommended", "total": 166.50, "lines": [{"status": "counter_recommended", "unit_price": 16.65, "counter_price": 16.65}], "warning_contains": ["below the margin floor"]},
+  {"id": "contract-below-floor", "case_status": "ready_for_review", "pricing_status": "escalation_required", "total": 96.00, "lines": [{"status": "escalation_required", "unit_price": 9.60}], "warning_contains": ["contract price is below the current margin floor"]},
+  {"id": "multi-line-program", "case_status": "ready_for_review", "pricing_status": "escalation_required", "total": 5227.25, "lines": [{"status": "approved", "unit_price": 22.50}, {"status": "approved", "unit_price": 17.945}, {"status": "escalation_required", "unit_price": 10.40, "counter_price": 10.40}], "warning_contains": ["requested discount exceeds the auto-approval cap"]},
+  {"id": "missing-shipping-address", "case_status": "needs_info", "pricing_status": null, "total": null, "lines": [], "missing_contains": ["shipping address missing"]},
+  {"id": "unknown-product", "case_status": "needs_info", "pricing_status": null, "total": null, "lines": [], "missing_contains": ["Deluxe Rocket Backpack"]}
+]
