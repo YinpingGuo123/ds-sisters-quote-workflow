@@ -23,7 +23,7 @@ _ATTENTION_PRICING = {
     PricingStatus.ESCALATION_REQUIRED,
     PricingStatus.INSUFFICIENT_DATA,
 }
-_ATTENTION_STATUS = {CaseStatus.NEEDS_INFO, CaseStatus.FAILED}
+_ATTENTION_STATUS = {CaseStatus.NEEDS_INFO, CaseStatus.FAILED, CaseStatus.REWORK_REQUESTED}
 
 SUBTITLE = {
     "My Queue": "Cases assigned to you for review",

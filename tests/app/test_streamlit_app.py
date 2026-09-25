@@ -93,6 +93,32 @@ def test_editing_a_needs_info_case_supplies_the_address_and_prices_it(app):
     assert case_id not in _cases(app)
 
 
+def test_asking_ai_to_revise_parks_the_case_then_rework_returns_it_to_review(app):
+    case_id = "Q-standard-quote"
+    app.run()
+    app.session_state["selected_case"] = case_id
+    app.run()
+
+    next(b for b in app.button if b.label == "Ask AI to Revise").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+    app.text_area(f"{case_id}-revise-reason").set_value("The summary buries the thin margin")
+    next(b for b in app.button if b.label == "Send back").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+
+    # parked, visible as needing attention, and not approvable
+    assert "Rework Requested" in _markdown_text(app) or any(
+        "rework" in w.value.lower() for w in app.warning
+    )
+    assert not any(b.label == "Approve" for b in app.button)
+    _screen(app, "needs_attention")
+    assert case_id in _cases(app)
+
+    _screen(app, "my_queue")
+    next(b for b in app.button if b.label == "Run rework now").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+    assert any(b.label == "Approve" for b in app.button)
+
+
 def test_case_detail_shows_every_card_and_approve_produces_quotation(app):
     app.run()
     app.session_state["selected_case"] = "Q-standard-quote"

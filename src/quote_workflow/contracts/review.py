@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from quote_workflow.contracts.enums import ReviewAction
+from quote_workflow.contracts.enums import ReviewAction, ReworkTarget
 
 
 class ReviewerSummary(BaseModel):
@@ -35,3 +35,20 @@ class ReviewDecision(BaseModel):
     reviewer: str
     comment: str | None = None
     decided_at: datetime
+
+
+class ReworkRequest(BaseModel):
+    """A reviewer sending a case back to one of our own stages.
+
+    At most one is open per case, which is why it lives on the QuoteCase rather
+    than in a work-item table: the case row *is* the work item, and
+    ``store.list(status=REWORK_REQUESTED)`` is the whole discovery mechanism.
+    ``resolved_at`` is stamped when the rework completes; the request is kept
+    so the case history says what was asked for and why.
+    """
+
+    target: ReworkTarget
+    reason: str
+    requested_by: str
+    requested_at: datetime
+    resolved_at: datetime | None = None

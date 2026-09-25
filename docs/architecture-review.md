@@ -116,8 +116,10 @@ Only true cross-module shapes live here. Pydantic v2, `StrEnum`, JSON round-trip
 
 ### Enums
 ```python
-class CaseStatus(StrEnum):       RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, APPROVED, REJECTED, FAILED
+class CaseStatus(StrEnum):       RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, REWORK_REQUESTED, APPROVED, REJECTED, FAILED
 class ReviewAction(StrEnum):     APPROVE, REJECT, REQUEST_INFO
+class ReworkTarget(StrEnum):     PRICING, EXPLAIN     # portal work; no INTAKE - see §4.1
+class QuotationFormat(StrEnum):  MARKDOWN, HTML, PDF  # portal work; which renderer produced a body
 class ResolutionStatus(StrEnum): RESOLVED, MISSING, NOT_FOUND, AMBIGUOUS     # POC
 class PricingStatus(StrEnum):    APPROVED, COUNTER_RECOMMENDED, ESCALATION_REQUIRED, INSUFFICIENT_DATA  # POC
 ```
@@ -266,8 +268,11 @@ RECEIVED ──(intake complete + priced)─────────────
 RECEIVED / NEEDS_INFO ──(unhandled error)──► FAILED ──(re-run)──► RECEIVED
 READY_FOR_REVIEW ──APPROVE──► APPROVED      READY_FOR_REVIEW ──REJECT──► REJECTED
 READY_FOR_REVIEW ──REQUEST_INFO──► NEEDS_INFO
+READY_FOR_REVIEW ──rework requested──► REWORK_REQUESTED ──rework run──► READY_FOR_REVIEW
 ```
 `READY_FOR_REVIEW` ⇔ `request.is_complete` **and** `pricing` exists. No `PROCESSING`: the pipeline runs synchronously in-process (script or Streamlit callback); add it only if a background runner appears.
+
+**Rework** (added with the portal work). `REWORK_REQUESTED` is a reviewer sending the case back to one of *our* stages; `NEEDS_INFO` is waiting on the customer. `ReworkTarget` is `PRICING` or `EXPLAIN` — deliberately no `INTAKE`, because a case only reaches review once the request is complete, so extraction that is wrong rather than missing is corrected by the reviewer through `workflow.apply_edit`, and most seeded cases carry no `source` to re-extract. The case row is the work item: `store.list(status=REWORK_REQUESTED)` is the entire discovery mechanism, so there is no work-item table. Two-step by design (`request_rework` then `run_rework`) so the state is observable and survives a refresh; `run_rework` re-runs `price_and_summarize`, so a reworked case never shows a stale number. `scripts/run_rework.py` demonstrates an out-of-process component discovering and completing the work through the same store.
 
 ### 4.2 Entry points (`workflow/pipeline.py`, `workflow/review.py`)
 ```python
@@ -299,7 +304,7 @@ Pricing Result                      per line: list, deal/ladders, recommended, r
 Pricing Rationale                   PricingDecision.lines[].rationale (deterministic)
 AI Reviewer Summary                 ReviewerSummary.summary / rationale / warnings / attention_items (+ "fallback" badge)
 Warnings / Missing Information      PricingDecision.warnings + request.missing_fields() + clarification_questions
-[Approve] [Reject] [Request Information]   → workflow.apply_review
+[Approve] [Edit] [Ask AI to Revise] [Reject]   → workflow.apply_review / apply_edit / request_rework
 Draft quote / Quotation             preview before a decision; the stored quotation after approval, + download
 Tab: Technical Trace                case_events, stage timings, Langfuse trace link
 ```

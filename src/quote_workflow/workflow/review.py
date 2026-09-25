@@ -19,12 +19,12 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from quote_workflow.contracts.case import CaseEvent, QuoteCase
-from quote_workflow.contracts.enums import CaseStatus, ReviewAction
+from quote_workflow.contracts.enums import CaseStatus, ReviewAction, ReworkTarget
 from quote_workflow.contracts.quote_request import QuoteRequest
-from quote_workflow.contracts.review import ReviewDecision
+from quote_workflow.contracts.review import ReviewDecision, ReworkRequest
 from quote_workflow.contracts.store import CaseStore
 from quote_workflow.quotation.render import build_quotation
-from quote_workflow.workflow.pipeline import submit_request
+from quote_workflow.workflow.pipeline import price_and_summarize, submit_request
 from quote_workflow.workflow.status import REVIEW_OUTCOME, check_transition
 
 # A reviewer may correct a case that is waiting for information or sitting in
@@ -103,3 +103,60 @@ def apply_edit(
     # submit_request re-reads the case, so the outcome is decided by the one
     # completeness rule: still incomplete -> NEEDS_INFO, complete -> re-priced.
     return submit_request(store, conn, case_id, request, **run_options)
+
+
+# --- rework --------------------------------------------------------------------
+
+
+def request_rework(
+    store: CaseStore, case_id: str, target: ReworkTarget, reason: str, requested_by: str
+) -> QuoteCase:
+    """Send a case back to one of our own stages. Does not do the work.
+
+    Deliberately two-step: the case parks in REWORK_REQUESTED where the queue
+    can show it and a reviewer cannot approve it, until someone - the portal or
+    ``scripts/run_rework.py`` - calls ``run_rework``.
+    """
+    case = store.get(case_id)
+    if case.status != CaseStatus.READY_FOR_REVIEW:
+        raise ValueError(f"case {case_id} is {case.status.value}; only a case in review can be sent for rework")
+    check_transition(case.status, CaseStatus.REWORK_REQUESTED)
+
+    now = datetime.now(UTC)
+    case.rework = ReworkRequest(target=target, reason=reason, requested_by=requested_by, requested_at=now)
+    event = CaseEvent(
+        at=now,
+        stage="rework",
+        message=f"{requested_by} requested {target.value} rework: {reason}",
+        level="warning",
+        from_status=case.status,
+        to_status=CaseStatus.REWORK_REQUESTED,
+    )
+    case.status = CaseStatus.REWORK_REQUESTED
+    case.updated_at = now
+    store.save(case, event)
+    return store.get(case_id)
+
+
+def run_rework(store: CaseStore, conn: sqlite3.Connection, case_id: str, **run_options: Any) -> QuoteCase:
+    """Carry out an open rework request and return the case to review.
+
+    Both targets re-run the same seam - pricing, then the summary - so a
+    reworked case can never carry a stale number. An EXPLAIN request also hands
+    the reviewer's reason to ``explain`` so the new summary answers it.
+    """
+    case = store.get(case_id)
+    if case.status != CaseStatus.REWORK_REQUESTED or case.rework is None:
+        raise ValueError(f"case {case_id} has no open rework request")
+
+    target = case.rework.target
+    feedback = case.rework.reason if target == ReworkTarget.EXPLAIN else None
+    reworked = price_and_summarize(store, conn, case_id, reviewer_feedback=feedback, **run_options)
+    if reworked.status != CaseStatus.READY_FOR_REVIEW or reworked.rework is None:
+        return reworked  # the re-run failed or fell back to NEEDS_INFO; the request stays open
+
+    now = datetime.now(UTC)
+    reworked.rework = reworked.rework.model_copy(update={"resolved_at": now})
+    reworked.updated_at = now
+    store.save(reworked, CaseEvent(at=now, stage="rework", message=f"{target.value} rework completed"))
+    return store.get(case_id)

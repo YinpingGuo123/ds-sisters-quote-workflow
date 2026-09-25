@@ -69,14 +69,29 @@ status transitions. No event sourcing, no migrations — bump `schema_version`, 
 the db, reseed. `catalog.db` is separate and rebuilt by `scripts/build_db.py`.
 
 ## Reviewer workflow
-Statuses: RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, APPROVED, REJECTED, FAILED.
-READY_FOR_REVIEW means the request is complete and a PricingDecision exists.
+Statuses: RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, REWORK_REQUESTED, APPROVED, REJECTED,
+FAILED. READY_FOR_REVIEW means the request is complete and a PricingDecision exists.
 Transitions happen only through `workflow/` (`submit_request`, `price_and_summarize`,
-`apply_review`); the portal calls those functions and never changes status itself.
-Reviewer actions: Approve, Reject, Request Information. No price overrides in the MVP.
-Case detail shows: request/customer info (billing, shipping, delivery date), items,
-pricing result, pricing rationale, AI reviewer summary, warnings/missing information,
-the three actions, and the quotation after approval.
+`apply_review`, `apply_edit`, `request_rework`, `run_rework`); the portal calls those
+functions and never changes status itself.
+Reviewer actions: Approve, Edit, Ask AI to Revise, Reject. No price overrides in the MVP
+— editing covers addresses, dates and quantities, and re-runs pricing through
+`submit_request`. Case detail shows: original RFQ, extracted data (incl. billing,
+shipping, delivery date, items), the deterministic pricing recommendation and its
+rationale, the AI reviewer summary, validation/warnings, a processing timeline built
+from `case_events`, a draft quote before any decision, and the stored quotation after
+approval.
+
+## Rework
+REWORK_REQUESTED means a reviewer sent the case back to one of *our* stages
+(`ReworkTarget.PRICING` or `EXPLAIN`); NEEDS_INFO means we are waiting on the customer.
+There is no INTAKE target: a case only reaches review once the request is complete, so
+extraction that is wrong rather than missing is corrected with `apply_edit`.
+The case row is the work item — `store.list(status=REWORK_REQUESTED)` is the whole
+discovery mechanism, so no work-item table. Rework is two-step (request, then run) so
+the state is observable; `run_rework` re-runs `price_and_summarize`, so a reworked case
+never carries a stale number. `scripts/run_rework.py` shows an out-of-process component
+doing the same thing through the same store.
 
 ## Quotation
 Structured `Quotation` model first (quote number, case id, dates, customer, billing and

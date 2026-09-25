@@ -18,6 +18,7 @@ class CaseStatus(StrEnum):
     RECEIVED = "received"
     NEEDS_INFO = "needs_info"
     READY_FOR_REVIEW = "ready_for_review"
+    REWORK_REQUESTED = "rework_requested"
     APPROVED = "approved"
     REJECTED = "rejected"
     FAILED = "failed"
@@ -27,6 +28,20 @@ class ReviewAction(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     REQUEST_INFO = "request_info"
+
+
+class ReworkTarget(StrEnum):
+    """Which part of our own pipeline a reviewer is sending back.
+
+    Distinct from ``REQUEST_INFO``, which waits on the customer. There is no
+    INTAKE target: a case only reaches review once the request is complete, so
+    extraction that is wrong rather than missing is corrected by the reviewer
+    through ``workflow.apply_edit`` - faster and more reliable than a second
+    pass over unchanged text. Add INTAKE if and when re-extraction earns it.
+    """
+
+    PRICING = "pricing"  # re-price, e.g. after a policy change or a new as-of date
+    EXPLAIN = "explain"  # re-word the reviewer summary ("Ask AI to Revise")
 
 
 class QuotationFormat(StrEnum):

@@ -31,6 +31,7 @@ reviewer summary is the code-built fallback and prices/statuses are identical.
 python scripts/build_db.py          # data/reference/*.csv -> data/db/catalog.db
 python scripts/seed_cases.py        # data/samples/requests.json -> data/db/cases.db (8 demo cases)
 python scripts/run_case.py --all    # list cases; `run_case.py Q-below-floor` shows one in detail
+python scripts/run_rework.py        # cases a reviewer sent back; `--run` carries the rework out
 .venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
 ```
 
@@ -70,7 +71,8 @@ src/quote_workflow/
   evaluation/                 evaluation                                      (owner: Rea)
 app/                          Streamlit portal: left navigation (screens/), queue, case detail
                               cards, processing timeline, technical trace
-scripts/                      build_db, seed_cases, run_case (+ ingest_inbox, run_eval by their owners)
+scripts/                      build_db, seed_cases, run_case, run_rework
+                              (+ ingest_inbox, run_eval by their owners)
 tests/                        pytest; temp SQLite fixtures, no network, LLM clients mocked
 ```
 

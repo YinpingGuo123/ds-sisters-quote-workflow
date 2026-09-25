@@ -25,9 +25,10 @@ from quote_workflow.contracts.quotation import Quotation
 from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.store import CaseStore
 from quote_workflow.quotation import build_quotation, renderer_for
-from quote_workflow.workflow import apply_review, rerun
+from quote_workflow.workflow import apply_review, rerun, run_rework
 from ui import money, pct, pricing_badge, status_badge
 from views.edit_form import render_edit_dialog, request_edit
+from views.rework_form import render_revise_dialog, request_revise
 from views.timeline import render_timeline
 
 
@@ -271,15 +272,30 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
             clicked = ReviewAction.APPROVE
         if cols[1].button("Edit", key=f"edit-{case.case_id}", width="stretch"):
             request_edit(case.case_id)
-        if cols[2].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
+        if cols[2].button("Ask AI to Revise", key=f"revise-{case.case_id}", width="stretch"):
+            request_revise(case.case_id)
+        if cols[3].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
             clicked = ReviewAction.REJECT
-        if cols[3].button("Request information", key=f"info-{case.case_id}", width="stretch"):
-            clicked = ReviewAction.REQUEST_INFO
         if clicked is not None:
             decision = ReviewDecision(
                 action=clicked, reviewer=viewer, comment=comment or None, decided_at=datetime.now(UTC)
             )
             apply_review(store, case.case_id, decision)
+            st.rerun()
+    elif case.status == CaseStatus.REWORK_REQUESTED:
+        rework = case.rework
+        st.warning(
+            f"**{rework.target.value.title()} rework requested** by {rework.requested_by} "
+            f"on {rework.requested_at:%b %d, %H:%M}\n\n{rework.reason}"
+            if rework
+            else "Rework requested."
+        )
+        st.caption(
+            "The case cannot be approved until this is done. Run it here, or let "
+            "scripts/run_rework.py pick it up."
+        )
+        if st.button("Run rework now", type="primary", key=f"run-rework-{case.case_id}"):
+            run_rework(store, conn, case.case_id, use_llm=st.session_state.get("use_llm", False))
             st.rerun()
     elif case.status == CaseStatus.NEEDS_INFO:
         _last_decision(case)
@@ -296,6 +312,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
         st.caption("Waiting for information before this case can be reviewed.")
 
     render_edit_dialog(case, store, conn, viewer)
+    render_revise_dialog(case, store, viewer)
 
 
 def render_case(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:

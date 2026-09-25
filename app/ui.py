@@ -12,6 +12,7 @@ STATUS_LABEL = {
     CaseStatus.RECEIVED: "Received",
     CaseStatus.NEEDS_INFO: "Needs Info",
     CaseStatus.READY_FOR_REVIEW: "Ready for Review",
+    CaseStatus.REWORK_REQUESTED: "Rework Requested",
     CaseStatus.APPROVED: "Approved",
     CaseStatus.REJECTED: "Rejected",
     CaseStatus.FAILED: "Failed",
@@ -21,6 +22,7 @@ STATUS_COLOR = {
     CaseStatus.RECEIVED: "gray",
     CaseStatus.NEEDS_INFO: "orange",
     CaseStatus.READY_FOR_REVIEW: "blue",
+    CaseStatus.REWORK_REQUESTED: "gray",  # in progress elsewhere, not the reviewer's move
     CaseStatus.APPROVED: "green",
     CaseStatus.REJECTED: "red",
     CaseStatus.FAILED: "red",

@@ -7,11 +7,18 @@ New fields must be Optional with defaults so stored cases keep loading.
 
 from quote_workflow.contracts.case import SCHEMA_VERSION, CaseEvent, QuoteCase
 from quote_workflow.contracts.common import Address
-from quote_workflow.contracts.enums import CaseStatus, PricingStatus, ResolutionStatus, ReviewAction
+from quote_workflow.contracts.enums import (
+    CaseStatus,
+    PricingStatus,
+    QuotationFormat,
+    ResolutionStatus,
+    ReviewAction,
+    ReworkTarget,
+)
 from quote_workflow.contracts.pricing import Lever, LineDecision, PricingDecision
 from quote_workflow.contracts.quotation import Quotation, QuotationLine
 from quote_workflow.contracts.quote_request import QuoteLine, QuoteRequest
-from quote_workflow.contracts.review import ReviewDecision, ReviewerSummary
+from quote_workflow.contracts.review import ReviewDecision, ReviewerSummary, ReworkRequest
 from quote_workflow.contracts.source import RfqSource
 from quote_workflow.contracts.store import CaseStore
 
@@ -26,6 +33,7 @@ __all__ = [
     "PricingDecision",
     "PricingStatus",
     "Quotation",
+    "QuotationFormat",
     "QuotationLine",
     "QuoteCase",
     "QuoteLine",
@@ -34,5 +42,7 @@ __all__ = [
     "ReviewAction",
     "ReviewDecision",
     "ReviewerSummary",
+    "ReworkRequest",
+    "ReworkTarget",
     "RfqSource",
 ]
