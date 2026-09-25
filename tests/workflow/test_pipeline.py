@@ -15,7 +15,14 @@ from quote_workflow.contracts.quote_request import QuoteLine, QuoteRequest
 from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.source import RfqSource
 from quote_workflow.storage.sqlite_store import SqliteCaseStore
-from quote_workflow.workflow import apply_review, create_case, create_case_from_request, rerun, submit_request
+from quote_workflow.workflow import (
+    apply_edit,
+    apply_review,
+    create_case,
+    create_case_from_request,
+    rerun,
+    submit_request,
+)
 from quote_workflow.workflow.status import InvalidTransition, check_transition
 
 AS_OF = date(2026, 9, 5)
@@ -170,6 +177,73 @@ def test_case_with_source_keeps_the_original_rfq(store):
     case = create_case(store, source=source, assigned_to="John")
     assert case.status == CaseStatus.RECEIVED and case.assigned_to == "John"
     assert store.get(case.case_id).source.body_text == "20 launchers please"
+
+
+# --- reviewer edits ------------------------------------------------------------
+
+
+def test_edit_completes_a_needs_info_case_prices_it_and_persists(built_db, store, tmp_path):
+    partial = _complete_request(built_db).model_copy(update={"shipping_address": None})
+    case = create_case_from_request(store, built_db, partial, case_id="Q-E1", as_of_date=AS_OF, use_llm=False)
+    assert case.status == CaseStatus.NEEDS_INFO
+
+    edited = apply_edit(
+        store,
+        built_db,
+        "Q-E1",
+        partial.model_copy(update={"shipping_address": ADDRESS}),
+        editor="Sarah",
+        as_of_date=AS_OF,
+        use_llm=False,
+    )
+
+    assert edited.status == CaseStatus.READY_FOR_REVIEW
+    assert edited.pricing is not None
+    assert edited.request.shipping_address == ADDRESS
+    edit_events = [e for e in edited.events if e.stage == "review"]
+    assert len(edit_events) == 1
+    assert edit_events[0].message == "Sarah edited the request: shipping address"
+
+    # survives a fresh connection to the same database file
+    reopened = SqliteCaseStore(tmp_path / "cases.db")
+    try:
+        assert reopened.get("Q-E1").status == CaseStatus.READY_FOR_REVIEW
+    finally:
+        reopened.close()
+
+
+def test_edit_that_changes_a_quantity_reprices(built_db, store):
+    request = _complete_request(built_db)
+    create_case_from_request(store, built_db, request, case_id="Q-E2", as_of_date=AS_OF, use_llm=False)
+
+    doubled = request.model_copy(update={"lines": [request.lines[0].model_copy(update={"quantity": 20})]})
+    edited = apply_edit(store, built_db, "Q-E2", doubled, editor="Sarah", as_of_date=AS_OF, use_llm=False)
+
+    # list price is $30.00/unit and the volume ladder starts at 50 units, so 20 x $30.00
+    assert edited.status == CaseStatus.READY_FOR_REVIEW
+    assert edited.pricing.lines[0].quantity == 20
+    assert edited.pricing.total_quoted_value == pytest.approx(600.0)
+    assert edited.events[-1].to_status == CaseStatus.READY_FOR_REVIEW
+
+
+def test_edit_without_changes_records_nothing(built_db, store):
+    request = _complete_request(built_db)
+    case = create_case_from_request(store, built_db, request, case_id="Q-E3", as_of_date=AS_OF, use_llm=False)
+    before = len(case.events)
+
+    unchanged = apply_edit(store, built_db, "Q-E3", request, editor="Sarah", as_of_date=AS_OF, use_llm=False)
+
+    assert len(unchanged.events) == before
+    assert unchanged.status == CaseStatus.READY_FOR_REVIEW
+
+
+def test_edit_is_refused_once_a_case_is_decided(built_db, store):
+    request = _complete_request(built_db)
+    create_case_from_request(store, built_db, request, case_id="Q-E4", as_of_date=AS_OF, use_llm=False)
+    apply_review(store, "Q-E4", _decision(ReviewAction.APPROVE), today=AS_OF)
+
+    with pytest.raises(ValueError, match="approved"):
+        apply_edit(store, built_db, "Q-E4", request, editor="Sarah", use_llm=False)
 
 
 def test_transition_table():

@@ -47,6 +47,30 @@ def test_needs_info_view_lists_the_two_incomplete_samples(app):
     assert set(app.dataframe[0].value["Case"]) == {"Q-missing-shipping-address", "Q-unknown-product"}
 
 
+def test_editing_a_needs_info_case_supplies_the_address_and_prices_it(app):
+    case_id = "Q-missing-shipping-address"
+    app.run()
+    app.session_state["selected_case"] = case_id
+    app.run()
+    assert not app.exception, [e.value for e in app.exception]
+
+    next(b for b in app.button if b.label == "Edit case information").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+
+    app.text_input(f"{case_id}-ship-line1").set_value("500 Harbour Road")
+    app.text_input(f"{case_id}-ship-city").set_value("Seattle")
+    app.text_input(f"{case_id}-ship-country").set_value("US")
+    next(b for b in app.button if b.label == "Save changes").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+
+    # priced and reviewable now, and gone from the Needs Info queue
+    text = _markdown_text(app)
+    assert "Pricing result" in text and "Pricing rationale" in text
+    assert any(b.label == "Approve" for b in app.button)
+    app.sidebar.radio[0].set_value("Needs Info").run()
+    assert set(app.dataframe[0].value["Case"]) == {"Q-unknown-product"}
+
+
 def test_selecting_a_case_shows_detail_and_approve_produces_quotation(app):
     app.run()
     app.session_state["selected_case"] = "Q-standard-quote"

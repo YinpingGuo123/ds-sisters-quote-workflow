@@ -19,6 +19,7 @@ from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.store import CaseStore
 from quote_workflow.workflow import apply_review, rerun
 from ui import money, pct, pricing_badge, status_badge
+from views.edit_form import render_edit_dialog, request_edit
 
 
 def _header(case: QuoteCase) -> None:
@@ -207,19 +208,30 @@ def _warnings_section(case: QuoteCase) -> None:
         st.success("Nothing flagged.")
 
 
+def _last_decision(case: QuoteCase) -> None:
+    if not case.review:
+        return
+    st.caption(
+        f"{case.review.action.value.replace('_', ' ').title()} by {case.review.reviewer} "
+        f"on {case.review.decided_at:%b %d, %H:%M}" + (f" - {case.review.comment}" if case.review.comment else "")
+    )
+
+
 def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:
     st.markdown("#### Decision")
     if case.status == CaseStatus.READY_FOR_REVIEW:
         comment = st.text_input(
             "Comment (optional; goes on the quotation notes when approving)", key=f"comment-{case.case_id}"
         )
-        cols = st.columns(3)
+        cols = st.columns(4)
         clicked = None
         if cols[0].button("Approve", type="primary", key=f"approve-{case.case_id}", width="stretch"):
             clicked = ReviewAction.APPROVE
-        if cols[1].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
+        if cols[1].button("Edit", key=f"edit-{case.case_id}", width="stretch"):
+            request_edit(case.case_id)
+        if cols[2].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
             clicked = ReviewAction.REJECT
-        if cols[2].button("Request information", key=f"info-{case.case_id}", width="stretch"):
+        if cols[3].button("Request information", key=f"info-{case.case_id}", width="stretch"):
             clicked = ReviewAction.REQUEST_INFO
         if clicked is not None:
             decision = ReviewDecision(
@@ -227,17 +239,21 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
             )
             apply_review(store, case.case_id, decision)
             st.rerun()
+    elif case.status == CaseStatus.NEEDS_INFO:
+        _last_decision(case)
+        st.caption("This case is waiting for information. Supply it here and pricing re-runs automatically.")
+        if st.button("Edit case information", type="primary", key=f"edit-{case.case_id}"):
+            request_edit(case.case_id)
     elif case.status == CaseStatus.FAILED:
         if st.button("Re-run pipeline", key=f"rerun-{case.case_id}"):
             rerun(store, conn, case.case_id, use_llm=st.session_state.get("use_llm", False))
             st.rerun()
     elif case.review:
-        st.caption(
-            f"{case.review.action.value.replace('_', ' ').title()} by {case.review.reviewer} "
-            f"on {case.review.decided_at:%b %d, %H:%M}" + (f" - {case.review.comment}" if case.review.comment else "")
-        )
+        _last_decision(case)
     else:
         st.caption("Waiting for information before this case can be reviewed.")
+
+    render_edit_dialog(case, store, conn, viewer)
 
 
 def _quotation_section(case: QuoteCase) -> None:
