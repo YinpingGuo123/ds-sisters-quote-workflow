@@ -255,6 +255,18 @@ def get_deals(conn: sqlite3.Connection) -> list[Deal]:
     return [_deal_from_row(row) for row in conn.execute("SELECT * FROM special_deals ORDER BY deal_id")]
 
 
+_COUNTED_TABLES = ("customers", "products", "customer_aliases", "product_aliases", "special_deals", "sales_history")
+
+
+def table_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    """How many reference records were built, per table.
+
+    For the portal's monitoring view: it answers "is the catalog actually
+    populated" without anything outside this module writing SQL.
+    """
+    return {table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] for table in _COUNTED_TABLES}
+
+
 def get_sales_history(conn: sqlite3.Connection, customer_id: int, product_id: int) -> list[SaleRecord]:
     """Past transactions for the exact customer/product pair, most recent first."""
     rows = conn.execute(

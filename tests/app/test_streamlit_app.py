@@ -14,7 +14,7 @@ from streamlit.testing.v1 import AppTest
 import quote_workflow.config as config
 
 APP = Path(__file__).resolve().parents[2] / "app" / "streamlit_app.py"
-SCREENS = ["my_queue", "all_cases", "needs_attention", "completed"]
+SCREENS = ["my_queue", "all_cases", "needs_attention", "completed", "admin"]
 
 
 @pytest.fixture
@@ -29,8 +29,15 @@ def app(tmp_path: Path, monkeypatch):
 
 
 def _markdown_text(app: AppTest) -> str:
-    """Visible prose: card titles are markdown, disclaimers and metadata are captions."""
-    return " ".join([*(m.value for m in app.markdown), *(c.value for c in app.caption)])
+    """Visible prose: card titles are markdown, section titles are subheaders,
+    disclaimers and metadata are captions."""
+    return " ".join(
+        [
+            *(m.value for m in app.markdown),
+            *(c.value for c in app.caption),
+            *(s.value for s in app.subheader),
+        ]
+    )
 
 
 def _cases(app: AppTest) -> set[str]:
@@ -91,6 +98,42 @@ def test_editing_a_needs_info_case_supplies_the_address_and_prices_it(app):
     assert any(b.label == "Approve" for b in app.button)
     _screen(app, "needs_attention")
     assert case_id not in _cases(app)
+
+
+def test_search_and_filters_narrow_the_queue(app):
+    app.run()
+    assert len(app.dataframe[0].value) == 8
+
+    # search covers product names, not just the case id and customer
+    app.text_input("search-My Queue").set_value("missile").run()
+    assert not app.exception, [e.value for e in app.exception]
+    assert _cases(app) == {"Q-missing-shipping-address", "Q-multi-line-program"}
+
+    # the status filter only offers statuses actually present in this queue
+    app.text_input("search-My Queue").set_value("").run()
+    assert app.selectbox("f-status-My Queue").options == ["Any", "Needs Info", "Ready for Review"]
+    app.selectbox("f-status-My Queue").set_value("Needs Info").run()
+    assert _cases(app) == {"Q-unknown-product", "Q-missing-shipping-address"}
+
+    app.text_input("search-My Queue").set_value("no-such-product").run()
+    assert not app.dataframe
+    assert any("No case matches these filters." in i.value for i in app.info)
+
+
+def test_admin_reports_store_health_and_build_versions(app):
+    app.run()
+    _screen(app, "admin")
+    text = _markdown_text(app)
+    assert "Admin / Monitoring" in text
+
+    counts = app.dataframe[0].value  # cases per status
+    assert dict(zip(counts["Status"], counts["Cases"], strict=True)) == {"Needs Info": 2, "Ready for Review": 6}
+    assert any(m.label == "Case schema" for m in app.metric)
+    assert any(m.label == "Pricing policy" and m.value == "2026.09-v1" for m in app.metric)
+    # the catalog table is the second dataframe on the page and must not be empty
+    catalog_counts = app.dataframe[1].value
+    assert dict(zip(catalog_counts["Table"], catalog_counts["Records"], strict=True))["products"] > 0
+    assert not app.warning, [w.value for w in app.warning]
 
 
 def test_asking_ai_to_revise_parks_the_case_then_rework_returns_it_to_review(app):

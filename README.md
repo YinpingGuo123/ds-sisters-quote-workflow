@@ -36,7 +36,8 @@ python scripts/run_rework.py        # cases a reviewer sent back; `--run` carrie
 ```
 
 The portal seeds the demo cases itself when the store is empty. Navigate with My
-Queue / All Cases / Needs Attention / Completed, pick a case, read the extracted
+Queue / All Cases / Needs Attention / Completed / Admin, filter or search the
+queue, pick a case, read the extracted
 data, the deterministic pricing recommendation, the AI reviewer summary and the
 warnings, then Approve, Edit, Reject or Request information. Editing a case
 re-runs pricing; approving stores the quotation. A draft quote is previewable

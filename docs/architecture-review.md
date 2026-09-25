@@ -308,7 +308,7 @@ Warnings / Missing Information      PricingDecision.warnings + request.missing_f
 Draft quote / Quotation             preview before a decision; the stored quotation after approval, + download
 Tab: Technical Trace                case_events, stage timings, Langfuse trace link
 ```
-Queue views: My Queue (assigned_to = viewer), All Cases, Needs Info, Completed. "View as" selectbox replaces roles/auth.
+Queue views (navigation screens under `app/screens/`): My Queue (assigned_to = viewer), All Cases, Needs Attention, Completed, Admin / Monitoring. Each queue has a keyword search and status / assignee / customer / updated filters, all applied in Python over the store's list. "Needs Attention" is derived, not stored: open cases that are NEEDS_INFO, FAILED or REWORK_REQUESTED, or whose pricing needs a decision or carried warnings. Admin reports case counts by status, failed cases with their error events, the schema and policy versions, and catalog record counts. "View as" segmented control replaces roles/auth.
 
 ### 4.4 Original RFQ
 Shown from `case.source` when present; cases seeded from structured requests have `source = None` and show the request only.

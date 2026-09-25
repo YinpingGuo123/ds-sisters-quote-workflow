@@ -58,6 +58,7 @@ navigation = st.navigation(
         st.Page("screens/all_cases.py", title="All Cases", icon=":material/description:"),
         st.Page("screens/needs_attention.py", title="Needs Attention", icon=":material/warning:"),
         st.Page("screens/completed.py", title="Completed", icon=":material/check_circle:"),
+        st.Page("screens/admin.py", title="Admin / Monitoring", icon=":material/settings:"),
     ]
 )
 
