@@ -78,6 +78,9 @@ def test_selecting_a_case_shows_detail_and_approve_produces_quotation(app):
     assert not app.exception, [e.value for e in app.exception]
     text = _markdown_text(app)
     assert "Q-standard-quote" in text and "Pricing rationale" in text and "AI reviewer summary" in text
+    # a draft is previewable before any decision, and is not yet stored on the case
+    assert "Draft quote" in text and "Quotation Q-" in text
+    assert any(b.label == "Download draft (md)" for b in app.download_button)
 
     next(b for b in app.button if b.label == "Approve").click().run()
     assert not app.exception, [e.value for e in app.exception]

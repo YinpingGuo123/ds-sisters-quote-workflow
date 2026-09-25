@@ -29,6 +29,18 @@ class ReviewAction(StrEnum):
     REQUEST_INFO = "request_info"
 
 
+class QuotationFormat(StrEnum):
+    """How a quotation was rendered. The ``Quotation`` model is the source of
+    truth; a format is one view over it, produced by a renderer in
+    ``quotation.renderers``. MVP renders MARKDOWN; the others exist so a stored
+    quotation can say which renderer produced its archived body.
+    """
+
+    MARKDOWN = "markdown"
+    HTML = "html"
+    PDF = "pdf"
+
+
 class ResolutionStatus(StrEnum):
     """Whether a name on the request could be matched to a catalog record.
 

@@ -1,8 +1,13 @@
 """The quotation produced when a reviewer approves a case.
 
-Structured model first; ``body_markdown`` is the rendered representation the
-portal shows and offers for download. Any other renderer (PDF, HTML) is a
-function over this model, added later if wanted.
+The structured model is the source of truth and is format-neutral - no markup
+anywhere in it. ``body`` is an archival snapshot of how it was rendered when
+the reviewer approved it, and ``body_format`` says which renderer produced
+that snapshot, so a later change to a renderer cannot rewrite what was sent.
+
+Rendering itself lives in ``quotation.renderers``: a renderer is a function
+over this model, and adding HTML or PDF adds one there without changing this
+model, ``workflow`` or the portal.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, Field
 
 from quote_workflow.contracts.common import Address
+from quote_workflow.contracts.enums import QuotationFormat
 
 
 class QuotationLine(BaseModel):
@@ -41,5 +47,6 @@ class Quotation(BaseModel):
     payment_terms: str | None = None
     notes: str | None = None
 
-    body_markdown: str
+    body: str  # archival snapshot of the rendered document
+    body_format: QuotationFormat = QuotationFormat.MARKDOWN
     generated_at: datetime

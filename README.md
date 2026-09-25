@@ -60,7 +60,7 @@ src/quote_workflow/
   intake/                     RfqSource -> complete QuoteRequest             (owner: Jenny)
   pricing/                    deterministic engine + policy; service.price_request() -> PricingDecision
   explain/                    LLM reviewer summary, grounded + validated, with fallback
-  quotation/                  build_quotation() -> Quotation + markdown body
+  quotation/                  build_quotation() -> Quotation; renderers/ markdown today, HTML/PDF by adding one entry
   storage/                    SqliteCaseStore: `cases` (current state) + `case_events` (history)
   workflow/                   the composer: submit_request / price_and_summarize / apply_review
   observability/              tracing setup                                   (owner: Rea)

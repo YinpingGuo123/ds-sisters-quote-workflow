@@ -122,7 +122,7 @@ def test_approve_builds_quotation_and_reject_does_not(built_db, store):
     assert approved.quotation.valid_until == date(2026, 10, 5)
     assert approved.quotation.total == pytest.approx(300.0)
     assert approved.quotation.shipping_address == ADDRESS
-    assert "Superhero action jacket (Blue) M" in approved.quotation.body_markdown
+    assert "Superhero action jacket (Blue) M" in approved.quotation.body
     assert approved.quotation.notes == "Looks good"
     assert approved.events[-1].message.endswith("quotation Q-2026-Q-4 generated")
 

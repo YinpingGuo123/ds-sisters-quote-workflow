@@ -24,7 +24,9 @@ from quote_workflow.contracts.quote_request import QuoteRequest
 from quote_workflow.contracts.review import ReviewDecision, ReviewerSummary
 from quote_workflow.contracts.source import RfqSource
 
-SCHEMA_VERSION = 1
+# 2: Quotation.body_markdown became body + body_format (renderer seam).
+# No migrations - bump, delete data/db/cases.db, reseed.
+SCHEMA_VERSION = 2
 
 
 class CaseEvent(BaseModel):

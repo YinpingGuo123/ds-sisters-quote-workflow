@@ -193,9 +193,12 @@ class Quotation(BaseModel):
     requested_delivery_date: date | None; estimated_delivery_note: str | None   # static/demo text
     lines: list[QuotationLine]; subtotal; discount_amount: float | None; total
     payment_terms: str | None; notes: str | None
-    body_markdown: str               # rendered representation shown/downloaded in the portal
+    body: str                        # archival rendering shown/downloaded in the portal
+    body_format: QuotationFormat     # which renderer produced it (markdown today)
 ```
 Structured model first; markdown render second; PDF only after the flow works, and only as a renderer over this model.
+
+**Renderers** (added with the portal work): the model is format-neutral, and a format is a `Renderer` — a render function plus a media type and file extension — in `quotation/renderers.py`. `build_quotation(case, renderer=DEFAULT)` stores what the renderer produced. Adding HTML or PDF is a new render function and one `Renderer` entry; `contracts` and `workflow` do not change.
 
 ### `QuoteCase` / `CaseEvent` (`case.py`) — the persisted case record
 ```python
@@ -297,7 +300,7 @@ Pricing Rationale                   PricingDecision.lines[].rationale (determini
 AI Reviewer Summary                 ReviewerSummary.summary / rationale / warnings / attention_items (+ "fallback" badge)
 Warnings / Missing Information      PricingDecision.warnings + request.missing_fields() + clarification_questions
 [Approve] [Reject] [Request Information]   → workflow.apply_review
-Quotation (after approval)          body_markdown + download
+Draft quote / Quotation             preview before a decision; the stored quotation after approval, + download
 Tab: Technical Trace                case_events, stage timings, Langfuse trace link
 ```
 Queue views: My Queue (assigned_to = viewer), All Cases, Needs Info, Completed. "View as" selectbox replaces roles/auth.

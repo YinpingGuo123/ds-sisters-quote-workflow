@@ -14,9 +14,11 @@ import pandas as pd
 import streamlit as st
 
 from quote_workflow.contracts.case import QuoteCase
-from quote_workflow.contracts.enums import CaseStatus, ReviewAction
+from quote_workflow.contracts.enums import CaseStatus, QuotationFormat, ReviewAction
+from quote_workflow.contracts.quotation import Quotation
 from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.store import CaseStore
+from quote_workflow.quotation import build_quotation, renderer_for
 from quote_workflow.workflow import apply_review, rerun
 from ui import money, pct, pricing_badge, status_badge
 from views.edit_form import render_edit_dialog, request_edit
@@ -256,19 +258,39 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
     render_edit_dialog(case, store, conn, viewer)
 
 
+def _document_body(quotation: Quotation) -> None:
+    """Show a rendered quotation inline when the format allows it."""
+    if quotation.body_format is QuotationFormat.MARKDOWN:
+        st.markdown(quotation.body)
+    else:
+        st.caption(f"{quotation.body_format.value.upper()} document - download it to view.")
+
+
 def _quotation_section(case: QuoteCase) -> None:
-    quotation = case.quotation
-    if quotation is None:
-        return
-    st.markdown("#### Quotation")
+    """The approved quotation, or a draft preview of what approving would produce."""
+    if case.quotation is not None:
+        quotation, label, key = case.quotation, "Quotation", "quotation"
+        st.markdown("#### Quotation")
+        st.caption(f"{quotation.quote_number} · generated {quotation.generated_at:%b %d, %H:%M}")
+    else:
+        st.markdown("#### Draft quote")
+        try:
+            quotation = build_quotation(case)
+        except ValueError as exc:  # not priced, or addresses still missing
+            st.info(f"No draft yet - {exc}.")
+            return
+        label, key = "Draft", "draft"
+        st.caption("Preview only. The quotation is created and stored when the case is approved.")
+
+    renderer = renderer_for(quotation.body_format)
     st.download_button(
-        "Download quotation (markdown)",
-        data=quotation.body_markdown,
-        file_name=f"{quotation.quote_number}.md",
-        mime="text/markdown",
-        key=f"download-{case.case_id}",
+        f"Download {label.lower()} ({renderer.extension})",
+        data=quotation.body,
+        file_name=renderer.filename(quotation),
+        mime=renderer.media_type,
+        key=f"download-{key}-{case.case_id}",
     )
-    st.markdown(quotation.body_markdown)
+    _document_body(quotation)
 
 
 def render_case(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:
