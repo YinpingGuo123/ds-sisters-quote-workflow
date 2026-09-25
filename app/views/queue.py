@@ -1,32 +1,54 @@
-"""Queue views: My Queue / All Cases / Needs Info / Completed.
+"""Queue views: My Queue / All Cases / Needs Attention / Completed.
 
-Reads the store's list (denormalised columns, no events) and lets the user
-pick a case; the detail view renders below.
+Reads cases through the store and lets the user pick one; the detail view
+renders below. "Needs Attention" is derived from what pricing and the
+completeness rule already recorded - it is not a stored flag.
 """
 
 from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+from resources import MANAGER
 
 from quote_workflow.contracts.case import QuoteCase
-from quote_workflow.contracts.enums import CaseStatus
+from quote_workflow.contracts.enums import CaseStatus, PricingStatus
 from quote_workflow.contracts.store import CaseStore
 from ui import PRICING_LABEL, STATUS_LABEL, money, when
 
-VIEWS = ["My Queue", "All Cases", "Needs Info", "Completed"]
 _COMPLETED = {CaseStatus.APPROVED, CaseStatus.REJECTED}
-_MANAGER = "Manager (all cases)"
+# Pricing outcomes a human has to weigh in on, rather than simply approve.
+_ATTENTION_PRICING = {
+    PricingStatus.COUNTER_RECOMMENDED,
+    PricingStatus.ESCALATION_REQUIRED,
+    PricingStatus.INSUFFICIENT_DATA,
+}
+_ATTENTION_STATUS = {CaseStatus.NEEDS_INFO, CaseStatus.FAILED}
+
+SUBTITLE = {
+    "My Queue": "Cases assigned to you for review",
+    "All Cases": "Every case in the store",
+    "Needs Attention": "Open cases that need something beyond a routine approval",
+    "Completed": "Approved and rejected cases",
+}
+
+
+def needs_attention(case: QuoteCase) -> bool:
+    """Waiting on information, failed, or priced into a decision a human must make."""
+    if case.status in _COMPLETED:
+        return False
+    if case.status in _ATTENTION_STATUS:
+        return True
+    return bool(case.pricing and (case.pricing.status in _ATTENTION_PRICING or case.pricing.warnings))
 
 
 def _cases_for(store: CaseStore, view: str, viewer: str) -> list[QuoteCase]:
     if view == "My Queue":
-        cases = store.list() if viewer == _MANAGER else store.list(assigned_to=viewer)
-        return [c for c in cases if c.status not in _COMPLETED]
-    if view == "Needs Info":
-        return store.list(status=CaseStatus.NEEDS_INFO)
+        return store.list() if viewer == MANAGER else store.list(assigned_to=viewer)
+    if view == "Needs Attention":
+        return [case for case in store.list() if needs_attention(case)]
     if view == "Completed":
-        return [c for c in store.list() if c.status in _COMPLETED]
+        return [case for case in store.list() if case.status in _COMPLETED]
     return store.list()
 
 
@@ -45,19 +67,17 @@ def _row(case: QuoteCase) -> dict:
 def render_queue(store: CaseStore, view: str, viewer: str) -> str | None:
     """Render the queue table; return the selected case id (or None)."""
     cases = _cases_for(store, view, viewer)
-    subtitle = {
-        "My Queue": f"Cases assigned to {viewer}" if viewer != _MANAGER else "Every open case",
-        "All Cases": "Every case in the store",
-        "Needs Info": "Cases waiting for missing information",
-        "Completed": "Approved and rejected cases",
-    }[view]
-    st.subheader(view)
-    st.caption(f"{subtitle} - {len(cases)} case(s)")
+    subtitle = "Every open case" if view == "My Queue" and viewer == MANAGER else SUBTITLE[view]
+
+    heading, count = st.columns([4, 1])
+    heading.subheader(view)
+    heading.caption(subtitle)
+    count.markdown(f"<div style='text-align:right'>{len(cases)} case(s)</div>", unsafe_allow_html=True)
     if not cases:
         st.info("No cases here.")
         return None
 
-    frame = pd.DataFrame([_row(c) for c in cases])
+    frame = pd.DataFrame([_row(case) for case in cases])
     event = st.dataframe(
         frame,
         hide_index=True,

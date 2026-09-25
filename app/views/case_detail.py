@@ -1,8 +1,14 @@
-"""Business View of one case: request, items, pricing result, pricing
-rationale, AI reviewer summary, warnings, actions, quotation.
+"""Business View of one case, as a card grid with a timeline rail.
 
-Every number shown is read from the persisted case. Actions call
-``workflow.apply_review``; this file never changes a status itself.
+Every number shown is read from the persisted case. Actions call ``workflow``;
+this file never changes a status itself.
+
+Note the two separate cards for pricing and for the AI summary. Pricing is
+deterministic - policy plus plain Python - so its card is titled "Pricing
+Recommendation" and its bullets come from ``PricingDecision.rationale``. The
+only LLM-authored content on a case is ``ReviewerSummary``, which has its own
+card and its own llm/fallback badge. Labelling a price as AI-produced would
+misrepresent how it was decided.
 """
 
 from __future__ import annotations
@@ -22,20 +28,15 @@ from quote_workflow.quotation import build_quotation, renderer_for
 from quote_workflow.workflow import apply_review, rerun
 from ui import money, pct, pricing_badge, status_badge
 from views.edit_form import render_edit_dialog, request_edit
+from views.timeline import render_timeline
 
 
 def _header(case: QuoteCase) -> None:
     left, right = st.columns([3, 1])
     with left:
         st.markdown(f"## {case.case_id} &nbsp;|&nbsp; {case.customer_display}")
-        cols = st.columns([1, 1, 3])
-        with cols[0]:
-            status_badge(case.status)
-        with cols[1]:
-            if case.pricing:
-                pricing_badge(case.pricing.status)
-        with cols[2]:
-            st.caption(f"Assigned to **{case.assigned_to or '-'}** · created {case.created_at:%b %d, %H:%M}")
+        status_badge(case.status)
+        st.caption(f"Assigned to **{case.assigned_to or '-'}** · created {case.created_at:%b %d, %H:%M}")
     with right:
         if case.pricing:
             st.metric(
@@ -45,169 +46,208 @@ def _header(case: QuoteCase) -> None:
             )
 
 
-def _request_section(case: QuoteCase) -> None:
-    request = case.request
-    st.markdown("#### Request / customer information")
-    if request is None:
-        st.info("No request yet - intake has not produced one for this case.")
-        return
-    cols = st.columns(3)
-    with cols[0]:
-        st.markdown("**Billing address**")
-        st.text(request.billing_address.as_text() if request.billing_address else "- missing -")
-    with cols[1]:
-        st.markdown("**Shipping address**")
-        st.text(request.shipping_address.as_text() if request.shipping_address else "- missing -")
-    with cols[2]:
-        st.markdown("**Terms**")
-        delivery = request.requested_delivery_date.isoformat() if request.requested_delivery_date else "-"
-        discount = pct(request.requested_discount_pct) if request.requested_discount_pct is not None else "-"
-        st.text(
-            f"Requested delivery: {delivery}\n"
-            f"Contract term: {request.contract_months or 0} months\n"
-            f"Requested discount: {discount}"
-        )
-    if request.notes:
-        st.caption(f"Notes: {request.notes}")
-
-    st.markdown("#### Items / quantities")
-    rows = [
-        {
-            "#": n,
-            "Product": line.product_name or "-",
-            "Resolution": line.product_status.value + (f" ({', '.join(line.candidates)})" if line.candidates else ""),
-            "Qty": line.quantity if line.quantity is not None else "-",
-            "Requested price": money(line.requested_unit_price) if line.requested_unit_price else "-",
-            "Competitor price": money(line.competitor_price) if line.competitor_price else "-",
-        }
-        for n, line in enumerate(request.lines, start=1)
-    ]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+# --- cards ---------------------------------------------------------------------
 
 
-def _original_rfq(case: QuoteCase) -> None:
-    source = case.source
-    text = source.body_text if source else (case.request.source_text if case.request else None)
-    if not text:
-        return
-    with st.expander("Original RFQ", expanded=False):
+def _rfq_card(case: QuoteCase) -> None:
+    with st.container(border=True):
+        st.markdown("###### :material/mail: Original RFQ")
+        source = case.source
+        text = source.body_text if source else (case.request.source_text if case.request else None)
         if source:
             st.caption(
-                f"From: {source.sender or '-'} · Subject: {source.subject or '-'} · "
+                f"From: {source.sender or '-'}  \nSubject: {source.subject or '-'}  \n"
                 f"Received: {source.received_at:%b %d, %H:%M}"
             )
-            if source.attachment_names:
-                st.caption("Attachments: " + ", ".join(source.attachment_names))
-        st.text(text)
+        if not text:
+            st.caption("No original message - this case was created from a structured request.")
+            return
+        st.text(text if len(text) < 400 else text[:400] + " ...")
+        if source and source.attachment_names:
+            st.caption(":material/attach_file: " + " · ".join(source.attachment_names))
 
 
-def _pricing_section(case: QuoteCase) -> None:
-    pricing = case.pricing
-    st.markdown("#### Pricing result")
-    if pricing is None:
-        st.info("Not priced yet.")
-        return
-    rows = [
-        {
-            "#": line.line_number,
-            "Product": line.product_name,
-            "Qty": line.quantity,
-            "List": money(line.list_price),
-            "Deal / ladders": line.applicable_deal
-            or (
-                f"vol {line.volume_discount_pct:g}% · term {line.term_discount_pct:g}%"
-                if line.volume_discount_pct or line.term_discount_pct
-                else "-"
-            ),
-            "Recommended": money(line.recommended_unit_price),
-            "Requested": money(line.requested_unit_price) if line.requested_unit_price else "-",
-            "Counter": money(line.counter_unit_price) if line.counter_unit_price else "-",
-            "Final": money(line.final_unit_price),
-            "Line total": money(line.line_total),
-            "Margin": pct(line.margin_pct),
-            "Status": line.status.value,
-        }
-        for line in pricing.lines
-    ]
-    if rows:
-        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-    cols = st.columns(4)
-    cols[0].metric("List value", money(pricing.total_list_value))
-    cols[1].metric("Quoted", money(pricing.total_quoted_value))
-    cols[2].metric("Discount", pct(pricing.total_discount_pct))
-    cols[3].metric("Blended margin", pct(pricing.blended_margin_pct))
-    st.caption(
-        f"Priced {pricing.priced_at:%b %d, %H:%M} as of {pricing.as_of_date.isoformat()} "
-        f"· policy {pricing.policy_version}"
-    )
+def _extracted_card(case: QuoteCase) -> None:
+    with st.container(border=True):
+        st.markdown("###### :material/description: Extracted Data")
+        request = case.request
+        if request is None:
+            st.caption("No request yet - intake has not produced one for this case.")
+            return
+        delivery = request.requested_delivery_date.isoformat() if request.requested_delivery_date else "-"
+        st.markdown(
+            f"**Customer** · {request.customer_name or '-'}  \n"
+            f"**Delivery date** · {delivery}  \n"
+            f"**Contract term** · {request.contract_months or 0} months"
+        )
+        for number, line in enumerate(request.lines, start=1):
+            quantity = f"{line.quantity:,}" if line.quantity is not None else "?"
+            st.markdown(f"**Line {number}** · {line.product_name or '-'} — {quantity} units")
+            if line.product_status.value != "resolved":
+                st.caption(f"resolution: {line.product_status.value}")
+        st.markdown("**Bill to**")
+        st.caption(request.billing_address.as_text() if request.billing_address else "- missing -")
+        st.markdown("**Ship to**")
+        st.caption(request.shipping_address.as_text() if request.shipping_address else "- missing -")
 
-    st.markdown("#### Pricing rationale")
-    for line in pricing.lines:
-        with st.expander(
-            f"Line {line.line_number}: {line.product_name} - {money(line.final_unit_price)} ({line.status.value})",
-            expanded=len(pricing.lines) == 1,
-        ):
+
+def _pricing_card(case: QuoteCase) -> None:
+    with st.container(border=True):
+        st.markdown("###### :material/insights: Pricing Recommendation")
+        pricing = case.pricing
+        if pricing is None:
+            st.caption("Not priced yet.")
+            return
+        st.metric("Quoted total", money(pricing.total_quoted_value), f"{-pricing.total_discount_pct:.1f}% vs list")
+        pricing_badge(pricing.status)
+        st.caption(f"Blended margin {pct(pricing.blended_margin_pct)}")
+
+        st.markdown("**Rationale**")
+        for line in pricing.lines:
+            if len(pricing.lines) > 1:
+                st.caption(f"Line {line.line_number}: {line.product_name}")
             for sentence in line.rationale:
                 st.markdown(f"- {sentence}")
-            if line.historical_reference:
-                st.caption(f"History: {line.historical_reference}")
-            if line.levers:
-                st.caption(
-                    "Alternatives: "
-                    + "; ".join(f"{lever.description} -> {money(lever.unit_price)}" for lever in line.levers)
-                )
-
-
-def _summary_section(case: QuoteCase) -> None:
-    summary = case.summary
-    st.markdown("#### AI reviewer summary")
-    if summary is None:
-        st.info("No summary yet.")
-        return
-    if summary.generated_by == "llm":
-        st.caption(f"Generated by {summary.model}")
-    else:
         st.caption(
-            "Deterministic fallback"
-            + (f" - LLM output rejected: {summary.rejected_reason}" if summary.rejected_reason else " (LLM not used)")
+            f"Deterministic - policy {pricing.policy_version}, as of {pricing.as_of_date.isoformat()}. "
+            "Computed from pricing rules, not by the AI."
         )
-    st.write(summary.summary)
-    cols = st.columns(2)
-    with cols[0]:
+
+
+def _summary_card(case: QuoteCase) -> None:
+    with st.container(border=True):
+        st.markdown("###### :material/auto_awesome: AI Reviewer Summary")
+        summary = case.summary
+        if summary is None:
+            st.caption("No summary yet.")
+            return
+        if summary.generated_by == "llm":
+            st.caption(f"Generated by {summary.model}")
+        else:
+            why = f" - LLM output rejected: {summary.rejected_reason}" if summary.rejected_reason else " (LLM not used)"
+            st.caption("Deterministic fallback" + why)
+        st.write(summary.summary)
         if summary.rationale:
             st.markdown("**Rationale**")
             for item in summary.rationale:
                 st.markdown(f"- {item}")
-    with cols[1]:
         if summary.attention_items:
             st.markdown("**Needs your attention**")
             for item in summary.attention_items:
                 st.markdown(f"- {item}")
-    if summary.draft_reply:
-        with st.expander("Draft reply to customer"):
-            st.text(summary.draft_reply)
+        if summary.draft_reply:
+            with st.expander("Draft reply to customer"):
+                st.text(summary.draft_reply)
 
 
-def _warnings_section(case: QuoteCase) -> None:
-    st.markdown("#### Warnings / missing information")
-    shown = False
-    if case.request:
-        for item in case.request.missing_fields():
-            st.warning(item)
-            shown = True
-        for question in case.request.clarification_questions:
-            st.info(f"Clarification: {question}")
-            shown = True
-    if case.pricing:
-        for item in case.pricing.warnings:
-            st.warning(item)
-            shown = True
-    if case.summary and case.summary.generated_by == "llm":
-        for item in case.summary.warnings:
-            st.warning(f"AI: {item}")
-            shown = True
-    if not shown:
-        st.success("Nothing flagged.")
+def _warnings_card(case: QuoteCase) -> None:
+    with st.container(border=True):
+        st.markdown("###### :material/warning: Validation & Warnings")
+        shown = False
+        if case.request:
+            for item in case.request.missing_fields():
+                st.warning(item)
+                shown = True
+            for question in case.request.clarification_questions:
+                st.info(f"Clarification: {question}")
+                shown = True
+        if case.pricing:
+            for item in case.pricing.warnings:
+                st.warning(item)
+                shown = True
+        if case.summary and case.summary.generated_by == "llm":
+            for item in case.summary.warnings:
+                st.warning(f"AI: {item}")
+                shown = True
+        if not shown:
+            st.success("Nothing flagged.")
+
+
+# --- full-width sections -------------------------------------------------------
+
+
+def _pricing_detail(case: QuoteCase) -> None:
+    pricing = case.pricing
+    if pricing is None:
+        return
+    with st.expander("Pricing detail - per line", expanded=False):
+        rows = [
+            {
+                "#": line.line_number,
+                "Product": line.product_name,
+                "Qty": line.quantity,
+                "List": money(line.list_price),
+                "Deal / ladders": line.applicable_deal
+                or (
+                    f"vol {line.volume_discount_pct:g}% · term {line.term_discount_pct:g}%"
+                    if line.volume_discount_pct or line.term_discount_pct
+                    else "-"
+                ),
+                "Recommended": money(line.recommended_unit_price),
+                "Requested": money(line.requested_unit_price) if line.requested_unit_price else "-",
+                "Counter": money(line.counter_unit_price) if line.counter_unit_price else "-",
+                "Final": money(line.final_unit_price),
+                "Line total": money(line.line_total),
+                "Margin": pct(line.margin_pct),
+                "Status": line.status.value,
+            }
+            for line in pricing.lines
+        ]
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        cols = st.columns(4)
+        cols[0].metric("List value", money(pricing.total_list_value))
+        cols[1].metric("Quoted", money(pricing.total_quoted_value))
+        cols[2].metric("Discount", pct(pricing.total_discount_pct))
+        cols[3].metric("Blended margin", pct(pricing.blended_margin_pct))
+        for line in pricing.lines:
+            if line.historical_reference:
+                st.caption(f"Line {line.line_number} history: {line.historical_reference}")
+            if line.levers:
+                st.caption(
+                    f"Line {line.line_number} alternatives: "
+                    + "; ".join(f"{lever.description} -> {money(lever.unit_price)}" for lever in line.levers)
+                )
+
+
+def _document_body(quotation: Quotation) -> None:
+    """Show a rendered quotation inline when the format allows it."""
+    if quotation.body_format is QuotationFormat.MARKDOWN:
+        st.markdown(quotation.body)
+    else:
+        st.caption(f"{quotation.body_format.value.upper()} document - download it to view.")
+
+
+def _quotation_section(case: QuoteCase) -> None:
+    """The approved quotation, or a draft preview of what approving would produce."""
+    with st.container(border=True):
+        if case.quotation is not None:
+            quotation, label, key = case.quotation, "Quotation", "quotation"
+            st.markdown("###### :material/receipt_long: Quotation")
+            st.caption(f"{quotation.quote_number} · generated {quotation.generated_at:%b %d, %H:%M}")
+        else:
+            st.markdown("###### :material/draft: Draft Quote")
+            try:
+                quotation = build_quotation(case)
+            except ValueError as exc:  # not priced, or addresses still missing
+                st.caption(f"No draft yet - {exc}.")
+                return
+            label, key = "Draft", "draft"
+            st.caption("Preview only. The quotation is created and stored when the case is approved.")
+
+        renderer = renderer_for(quotation.body_format)
+        st.download_button(
+            f"Download {label.lower()} ({renderer.extension})",
+            data=quotation.body,
+            file_name=renderer.filename(quotation),
+            mime=renderer.media_type,
+            key=f"download-{key}-{case.case_id}",
+        )
+        with st.expander("Preview document", expanded=False):
+            _document_body(quotation)
+
+
+# --- actions -------------------------------------------------------------------
 
 
 def _last_decision(case: QuoteCase) -> None:
@@ -258,47 +298,24 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
     render_edit_dialog(case, store, conn, viewer)
 
 
-def _document_body(quotation: Quotation) -> None:
-    """Show a rendered quotation inline when the format allows it."""
-    if quotation.body_format is QuotationFormat.MARKDOWN:
-        st.markdown(quotation.body)
-    else:
-        st.caption(f"{quotation.body_format.value.upper()} document - download it to view.")
-
-
-def _quotation_section(case: QuoteCase) -> None:
-    """The approved quotation, or a draft preview of what approving would produce."""
-    if case.quotation is not None:
-        quotation, label, key = case.quotation, "Quotation", "quotation"
-        st.markdown("#### Quotation")
-        st.caption(f"{quotation.quote_number} · generated {quotation.generated_at:%b %d, %H:%M}")
-    else:
-        st.markdown("#### Draft quote")
-        try:
-            quotation = build_quotation(case)
-        except ValueError as exc:  # not priced, or addresses still missing
-            st.info(f"No draft yet - {exc}.")
-            return
-        label, key = "Draft", "draft"
-        st.caption("Preview only. The quotation is created and stored when the case is approved.")
-
-    renderer = renderer_for(quotation.body_format)
-    st.download_button(
-        f"Download {label.lower()} ({renderer.extension})",
-        data=quotation.body,
-        file_name=renderer.filename(quotation),
-        mime=renderer.media_type,
-        key=f"download-{key}-{case.case_id}",
-    )
-    _document_body(quotation)
-
-
 def render_case(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:
     _header(case)
-    _original_rfq(case)
-    _request_section(case)
-    _pricing_section(case)
-    _summary_section(case)
-    _warnings_section(case)
-    _actions(case, store, conn, viewer)
-    _quotation_section(case)
+    content, rail = st.columns([3, 1])
+    with content:
+        top = st.columns(3)
+        with top[0]:
+            _rfq_card(case)
+        with top[1]:
+            _extracted_card(case)
+        with top[2]:
+            _pricing_card(case)
+        bottom = st.columns(2)
+        with bottom[0]:
+            _summary_card(case)
+        with bottom[1]:
+            _warnings_card(case)
+        _pricing_detail(case)
+        _quotation_section(case)
+        _actions(case, store, conn, viewer)
+    with rail:
+        render_timeline(case)
