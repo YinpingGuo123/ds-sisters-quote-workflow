@@ -1,7 +1,13 @@
-"""Processing Timeline: what has happened to this case, from ``case_events``.
+"""Processing Timeline: the milestones of a case, from ``case_events``.
 
-Every row is a persisted event. The labels are friendlier than the raw stage
-names, but nothing here is invented - a step appears because it was recorded.
+Milestones only - every status change, plus each time the case was priced,
+because the total is what a reviewer is looking for. Everything else (the
+summary call, "request complete", rework bookkeeping) is real history but
+noise in a narrow rail, and lives in the Technical Trace tab instead.
+
+Without that filter the rail grows by four rows per rework round and stops
+being readable after two or three. Nothing here is invented: a milestone
+appears because it was recorded.
 """
 
 from __future__ import annotations
@@ -29,14 +35,25 @@ def _label(event: CaseEvent) -> str:
     return _STAGE_LABEL.get(event.stage, event.stage.title())
 
 
+def _is_milestone(event: CaseEvent) -> bool:
+    """A status change, or a pricing run. See the module docstring."""
+    return event.to_status is not None or event.stage == "pricing"
+
+
 def render_timeline(case: QuoteCase) -> None:
     with st.container(border=True):
         st.markdown("###### :material/schedule: Processing Timeline")
         if not case.events:
             st.caption("No events recorded.")
             return
-        last = len(case.events) - 1
-        for index, event in enumerate(case.events):
-            icon = ":material/radio_button_checked:" if index == last else _ICON[event.level]
+
+        milestones = [event for event in case.events if _is_milestone(event)]
+        last = case.events[-1]
+        for event in milestones:
+            icon = ":material/radio_button_checked:" if event is last else _ICON[event.level]
             st.markdown(f"{icon} **{_label(event)}**")
             st.caption(f"{event.at.astimezone():%b %d, %H:%M} · {event.message}")
+
+        hidden = len(case.events) - len(milestones)
+        if hidden:
+            st.caption(f"+ {hidden} more step(s) - see the Technical Trace tab.")

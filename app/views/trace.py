@@ -12,6 +12,9 @@ from ui import when
 
 def render_trace(case: QuoteCase) -> None:
     st.markdown("#### Event history")
+    st.caption(
+        "Every persisted event, append-only. The Business View timeline shows the milestones only."
+    )
     if not case.events:
         st.info("No events recorded.")
     else:

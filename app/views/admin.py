@@ -80,14 +80,28 @@ def _rejections() -> None:
 def _build_info() -> None:
     st.subheader("Build")
     policy = load_policy()
+    # Count what actually happened rather than whether a key is set. summarize()
+    # degrades to the fallback on any failure, so a misconfigured client produces a
+    # plausible summary and no error - "key present" would report LLM either way.
+    written_by = Counter(case.summary.generated_by for case in store().list() if case.summary)
+    by_llm, by_fallback = written_by.get("llm", 0), written_by.get("fallback", 0)
+
     cols = st.columns(4)
     cols[0].metric("Case schema", SCHEMA_VERSION)
     cols[1].metric("Pricing policy", policy.version)
-    cols[2].metric("Reviewer summary", "LLM" if use_llm() else "fallback")
-    cols[3].metric("Model", openai_model())
+    cols[2].metric("Summaries by LLM", f"{by_llm} of {by_llm + by_fallback}")
+    cols[3].metric("Model", openai_model() if use_llm() else "not configured")
+
+    if use_llm() and by_llm == 0 and by_fallback:
+        st.warning(
+            "An API key is configured, but every reviewer summary so far was written by the "
+            "deterministic fallback. Open a case and check the AI Reviewer Summary card for the "
+            "rejection reason - the LLM path fails quietly by design."
+        )
     st.caption(
-        "Pricing is deterministic in every configuration. The reviewer-summary setting only "
-        "affects wording, never a price or a status."
+        "Pricing is deterministic in every configuration; the reviewer summary only affects "
+        "wording, never a price or a status. Whether the LLM is used follows OPENAI_API_KEY - "
+        "it is not a per-review choice."
     )
 
 

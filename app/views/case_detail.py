@@ -275,7 +275,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
             clicked = ReviewAction.APPROVE
         if cols[1].button("Edit", key=f"edit-{case.case_id}", width="stretch"):
             request_edit(case.case_id)
-        if cols[2].button("Ask AI to Revise", key=f"revise-{case.case_id}", width="stretch"):
+        if cols[2].button("Send back", key=f"revise-{case.case_id}", width="stretch"):
             request_revise(case.case_id)
         if cols[3].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
             request_reject(case.case_id)  # the reason is required, so it is asked for in a dialog

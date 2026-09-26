@@ -162,6 +162,9 @@ def test_admin_reports_store_health_and_build_versions(app):
     assert _frame(app, "Status") == {"Needs Info": 2, "Ready for Review": 6}
     assert any(m.label == "Case schema" for m in app.metric)
     assert any(m.label == "Pricing policy" and m.value == "2026.09-v1" for m in app.metric)
+    # counted from summary.generated_by, so a silently-failing LLM would show here
+    assert any(m.label == "Summaries by LLM" and m.value == "0 of 6" for m in app.metric)
+    assert any(m.label == "Model" and m.value == "not configured" for m in app.metric)
     assert _frame(app, "Table")["products"] > 0  # the catalog is populated
     assert not app.warning, [w.value for w in app.warning]
 
@@ -172,10 +175,10 @@ def test_asking_ai_to_revise_parks_the_case_then_rework_returns_it_to_review(app
     app.session_state["selected_case"] = case_id
     app.run()
 
-    next(b for b in app.button if b.label == "Ask AI to Revise").click().run()
+    next(b for b in app.button if b.label == "Send back").click().run()
     assert not app.exception, [e.value for e in app.exception]
     app.text_area(f"{case_id}-revise-reason").set_value("The summary buries the thin margin")
-    next(b for b in app.button if b.label == "Send back").click().run()
+    next(b for b in app.button if b.label == "Confirm").click().run()
     assert not app.exception, [e.value for e in app.exception]
 
     # parked, visible as needing attention, and not approvable
@@ -190,6 +193,9 @@ def test_asking_ai_to_revise_parks_the_case_then_rework_returns_it_to_review(app
     next(b for b in app.button if b.label == "Run rework now").click().run()
     assert not app.exception, [e.value for e in app.exception]
     assert any(b.label == "Approve" for b in app.button)
+
+    # the rail shows milestones only; the rest stays in the Technical Trace
+    assert any("more step(s)" in c.value for c in app.caption)
 
 
 def test_case_detail_shows_every_card_and_approve_produces_quotation(app):

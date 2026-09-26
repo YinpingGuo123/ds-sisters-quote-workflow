@@ -1,4 +1,4 @@
-"""The "Ask AI to Revise" dialog: send a case back, or ask the customer.
+"""The "Send back" dialog: return a case to one of our stages, or ask the customer.
 
 One button in the action bar, three destinations, because the reviewer's
 complaint decides who has to act:
@@ -52,7 +52,7 @@ def render_revise_dialog(case: QuoteCase, store: CaseStore, viewer: str) -> None
         revise_dialog(case, store, viewer)
 
 
-@st.dialog("Ask AI to revise", on_dismiss=_close_revise)
+@st.dialog("Send this case back", on_dismiss=_close_revise)
 def revise_dialog(case: QuoteCase, store: CaseStore, viewer: str) -> None:
     choice = st.radio("What needs another pass?", list(_CHOICES), key=f"{case.case_id}-revise-what")
     target = _CHOICES[choice]
@@ -63,7 +63,7 @@ def revise_dialog(case: QuoteCase, store: CaseStore, viewer: str) -> None:
         placeholder="e.g. the summary does not mention the expired deal",
     )
 
-    if not st.button("Send back", type="primary", key=f"{case.case_id}-revise-send"):
+    if not st.button("Confirm", type="primary", key=f"{case.case_id}-revise-send"):
         return
     if not reason.strip():
         st.error("Please say why - it is recorded on the case and steers the rework.")

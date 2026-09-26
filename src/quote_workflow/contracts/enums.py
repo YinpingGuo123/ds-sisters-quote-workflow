@@ -57,7 +57,7 @@ class ReworkTarget(StrEnum):
     """
 
     PRICING = "pricing"  # re-price, e.g. after a policy change or a new as-of date
-    EXPLAIN = "explain"  # re-word the reviewer summary ("Ask AI to Revise")
+    EXPLAIN = "explain"  # re-word the reviewer summary (the portal's "Send back")
 
 
 class QuotationFormat(StrEnum):

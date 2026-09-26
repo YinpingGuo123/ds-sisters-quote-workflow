@@ -304,7 +304,7 @@ Pricing Result                      per line: list, deal/ladders, recommended, r
 Pricing Rationale                   PricingDecision.lines[].rationale (deterministic)
 AI Reviewer Summary                 ReviewerSummary.summary / rationale / warnings / attention_items (+ "fallback" badge)
 Warnings / Missing Information      PricingDecision.warnings + request.missing_fields() + clarification_questions
-[Approve] [Edit] [Ask AI to Revise] [Reject]   → workflow.apply_review / apply_edit / request_rework
+[Approve] [Edit] [Send back] [Reject]   → workflow.apply_review / apply_edit / request_rework
 Draft quote / Quotation             preview before a decision; the stored quotation after approval, + download
 Tab: Technical Trace                case_events, stage timings, Langfuse trace link
 ```
@@ -480,11 +480,16 @@ reasoning matters more than the verdicts.
   offering it only implied that it could. Admin reports which mode is live. The
   `use_llm=` parameter stays on the workflow functions — tests and seeding need it.
 
+- **"Ask AI to Revise" renamed to "Send back."** The mockup's label was imprecise: the
+  dialog also re-runs deterministic pricing and can ask the customer, neither of which
+  is AI. It was initially judged not worth the churn, then renamed after it confused
+  its own designer twice — the clearest available evidence that a cold reviewer would
+  fare worse. The distinction the label now carries: **Edit** means the *facts* are
+  wrong, so you change data and the system re-prices; **Send back** means the facts are
+  right but the *output* is not, so you change nothing and the system redoes its work.
+
 **Deliberately not built**
 
-- **Renaming "Ask AI to Revise" to "Send back."** The label is inherited from the UI
-  mockup and is imprecise — the dialog also re-runs deterministic pricing and can ask
-  the customer, neither of which is AI. Judged not worth the churn for the MVP.
 - **Extending Edit to `competitor_price` / `requested_unit_price` /
   `requested_discount_pct`.** These are the fields a reviewer would want when a
   customer cites a competitor quote or a promised discount. Left out to keep the edit
@@ -505,6 +510,31 @@ reasoning matters more than the verdicts.
 stores event *messages*, not snapshots. After a re-price the previous `PricingDecision`
 is gone — the event text retains the old totals, but the full prior breakdown cannot be
 reconstructed. That is the "no event sourcing" call in §3; a case cannot be replayed.
+
+### Open questions, raised while reviewing the running portal
+
+Not decided, not scheduled. Recorded so the reasoning survives.
+
+1. **More than one reviewer.** Today `assigned_to` is set once from `DEFAULT_REVIEWER`
+   and never changes; "View as" is a display filter over it. Real multi-reviewer working
+   needs assignment or routing *and* identity, and authentication is out of scope (§0).
+   So this cannot be answered properly without reopening that decision — which is the
+   honest answer, not an oversight. Decide whether the demo needs to *look* multi-user
+   (a reassign control) or whether one reviewer is enough to tell the story.
+2. **Who should see Admin / Monitoring.** Every viewer can open it today. Hiding it
+   unless the viewer is Manager is about three lines, but it would be a demo affordance
+   and not access control — anyone can pick Manager from the dropdown. Worth doing only
+   if the demo should *appear* role-aware; worth saying out loud that it would not be.
+3. **Processing Timeline length.** Partly addressed: the Business View now shows
+   milestones only (status changes plus each pricing run) and the Technical Trace keeps
+   every event. If a case goes through many rework rounds even the milestone list grows;
+   revisit only if that actually happens in practice.
+4. **Live LLM verification.** `explain/` is covered by tests with an injected fake
+   client, but no call has ever been made against the real API. The failure mode is
+   quiet by design: any error returns the deterministic fallback, so a misconfigured
+   client produces a plausible summary rather than an error. Run it once with a real key
+   before the demo; the Admin card now counts `generated_by` so a silent fallback is
+   visible rather than inferred from whether a key happens to be set.
 
 ---
 
