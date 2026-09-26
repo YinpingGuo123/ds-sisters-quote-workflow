@@ -20,6 +20,7 @@ from quote_workflow.workflow import (
     apply_review,
     create_case,
     create_case_from_request,
+    price_and_summarize,
     rerun,
     submit_request,
 )
@@ -244,6 +245,34 @@ def test_edit_is_refused_once_a_case_is_decided(built_db, store):
 
     with pytest.raises(ValueError, match="approved"):
         apply_edit(store, built_db, "Q-E4", request, editor="Sarah", use_llm=False)
+
+
+@pytest.mark.parametrize("action", [ReviewAction.APPROVE, ReviewAction.REJECT])
+def test_a_decided_case_keeps_its_pricing_record_untouched(built_db, store, action):
+    """Regression: re-running a decided case used to overwrite its PricingDecision
+    and append events before the transition check refused it, so an approved case
+    could end up showing a different price than the quotation that was sent."""
+    case_id = f"Q-final-{action.value}"
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id=case_id, as_of_date=AS_OF, use_llm=False
+    )
+    decided = apply_review(store, case_id, _decision(action), today=AS_OF)
+    priced_at, events = decided.pricing.priced_at, len(decided.events)
+
+    for attempt in (
+        lambda: rerun(store, built_db, case_id, as_of_date=AS_OF, use_llm=False),
+        lambda: price_and_summarize(store, built_db, case_id, as_of_date=AS_OF, use_llm=False),
+        lambda: submit_request(store, built_db, case_id, decided.request, as_of_date=AS_OF, use_llm=False),
+    ):
+        with pytest.raises(InvalidTransition, match="are final"):
+            attempt()
+
+    after = store.get(case_id)
+    assert after.status == decided.status
+    assert after.pricing.priced_at == priced_at, "the stored PricingDecision was replaced"
+    assert len(after.events) == events, "a refused re-run still wrote to the audit trail"
+    if action == ReviewAction.APPROVE:
+        assert after.quotation.total == after.pricing.total_quoted_value
 
 
 def test_transition_table():

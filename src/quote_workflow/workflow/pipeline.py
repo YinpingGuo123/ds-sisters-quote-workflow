@@ -29,7 +29,7 @@ from quote_workflow.contracts.store import CaseStore
 from quote_workflow.explain.summarize import summarize
 from quote_workflow.pricing.policy import PricingPolicy
 from quote_workflow.pricing.service import price_request
-from quote_workflow.workflow.status import check_transition
+from quote_workflow.workflow.status import InvalidTransition, check_transition, is_terminal
 
 
 def _now() -> datetime:
@@ -51,6 +51,20 @@ def _event(
         from_status=case.status if to_status is not None else None,
         to_status=to_status,
     )
+
+
+def _refuse_if_decided(case: QuoteCase) -> None:
+    """A reviewed case is finished: its request, pricing and quotation are the
+    record of what was sent.
+
+    Checked *before* any stage runs, not after. The transition check at the end
+    of a stage is too late - by then the new PricingDecision has already been
+    written over the one the quotation was built from.
+    """
+    if is_terminal(case.status):
+        raise InvalidTransition(
+            f"case {case.case_id} is {case.status.value}; its request and pricing are final"
+        )
 
 
 def _transition(
@@ -117,6 +131,7 @@ def submit_request(
     complete → priced and summarized.
     """
     case = store.get(case_id)
+    _refuse_if_decided(case)
     case.request = request
     missing = request.missing_fields()
     if missing:
@@ -149,6 +164,7 @@ def price_and_summarize(
     has already run and is final by the time the summary is requested.
     """
     case = store.get(case_id)
+    _refuse_if_decided(case)
     if case.request is None:
         raise ValueError(f"case {case_id} has no request to price")
     if not case.request.is_complete:
@@ -188,6 +204,7 @@ def price_and_summarize(
 def rerun(store: CaseStore, conn: sqlite3.Connection, case_id: str, **run_options: Any) -> QuoteCase:
     """Re-run a FAILED (or already reviewed-ready) case from its stored request."""
     case = store.get(case_id)
+    _refuse_if_decided(case)
     if case.status == CaseStatus.FAILED:
         _transition(store, case, CaseStatus.RECEIVED, "pipeline", "re-run requested")
     if case.request is None:
