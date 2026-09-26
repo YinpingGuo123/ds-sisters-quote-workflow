@@ -116,8 +116,10 @@ Only true cross-module shapes live here. Pydantic v2, `StrEnum`, JSON round-trip
 
 ### Enums
 ```python
-class CaseStatus(StrEnum):       RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, APPROVED, REJECTED, FAILED
+class CaseStatus(StrEnum):       RECEIVED, NEEDS_INFO, READY_FOR_REVIEW, REWORK_REQUESTED, APPROVED, REJECTED, FAILED
 class ReviewAction(StrEnum):     APPROVE, REJECT, REQUEST_INFO
+class ReworkTarget(StrEnum):     PRICING, EXPLAIN     # portal work; no INTAKE - see §4.1
+class QuotationFormat(StrEnum):  MARKDOWN, HTML, PDF  # portal work; which renderer produced a body
 class ResolutionStatus(StrEnum): RESOLVED, MISSING, NOT_FOUND, AMBIGUOUS     # POC
 class PricingStatus(StrEnum):    APPROVED, COUNTER_RECOMMENDED, ESCALATION_REQUIRED, INSUFFICIENT_DATA  # POC
 ```
@@ -193,9 +195,12 @@ class Quotation(BaseModel):
     requested_delivery_date: date | None; estimated_delivery_note: str | None   # static/demo text
     lines: list[QuotationLine]; subtotal; discount_amount: float | None; total
     payment_terms: str | None; notes: str | None
-    body_markdown: str               # rendered representation shown/downloaded in the portal
+    body: str                        # archival rendering shown/downloaded in the portal
+    body_format: QuotationFormat     # which renderer produced it (markdown today)
 ```
 Structured model first; markdown render second; PDF only after the flow works, and only as a renderer over this model.
+
+**Renderers** (added with the portal work): the model is format-neutral, and a format is a `Renderer` — a render function plus a media type and file extension — in `quotation/renderers.py`. `build_quotation(case, renderer=DEFAULT)` stores what the renderer produced. Adding HTML or PDF is a new render function and one `Renderer` entry; `contracts` and `workflow` do not change.
 
 ### `QuoteCase` / `CaseEvent` (`case.py`) — the persisted case record
 ```python
@@ -263,8 +268,11 @@ RECEIVED ──(intake complete + priced)─────────────
 RECEIVED / NEEDS_INFO ──(unhandled error)──► FAILED ──(re-run)──► RECEIVED
 READY_FOR_REVIEW ──APPROVE──► APPROVED      READY_FOR_REVIEW ──REJECT──► REJECTED
 READY_FOR_REVIEW ──REQUEST_INFO──► NEEDS_INFO
+READY_FOR_REVIEW ──rework requested──► REWORK_REQUESTED ──rework run──► READY_FOR_REVIEW
 ```
 `READY_FOR_REVIEW` ⇔ `request.is_complete` **and** `pricing` exists. No `PROCESSING`: the pipeline runs synchronously in-process (script or Streamlit callback); add it only if a background runner appears.
+
+**Rework** (added with the portal work). `REWORK_REQUESTED` is a reviewer sending the case back to one of *our* stages; `NEEDS_INFO` is waiting on the customer. `ReworkTarget` is `PRICING` or `EXPLAIN` — deliberately no `INTAKE`, because a case only reaches review once the request is complete, so extraction that is wrong rather than missing is corrected by the reviewer through `workflow.apply_edit`, and most seeded cases carry no `source` to re-extract. The case row is the work item: `store.list(status=REWORK_REQUESTED)` is the entire discovery mechanism, so there is no work-item table. Two-step by design (`request_rework` then `run_rework`) so the state is observable and survives a refresh; `run_rework` re-runs `price_and_summarize`, so a reworked case never shows a stale number. `scripts/run_rework.py` demonstrates an out-of-process component discovering and completing the work through the same store.
 
 ### 4.2 Entry points (`workflow/pipeline.py`, `workflow/review.py`)
 ```python
@@ -296,11 +304,11 @@ Pricing Result                      per line: list, deal/ladders, recommended, r
 Pricing Rationale                   PricingDecision.lines[].rationale (deterministic)
 AI Reviewer Summary                 ReviewerSummary.summary / rationale / warnings / attention_items (+ "fallback" badge)
 Warnings / Missing Information      PricingDecision.warnings + request.missing_fields() + clarification_questions
-[Approve] [Reject] [Request Information]   → workflow.apply_review
-Quotation (after approval)          body_markdown + download
+[Approve] [Edit] [Send back] [Reject]   → workflow.apply_review / apply_edit / request_rework
+Draft quote / Quotation             preview before a decision; the stored quotation after approval, + download
 Tab: Technical Trace                case_events, stage timings, Langfuse trace link
 ```
-Queue views: My Queue (assigned_to = viewer), All Cases, Needs Info, Completed. "View as" selectbox replaces roles/auth.
+Queue views (navigation screens under `app/screens/`): My Queue (assigned_to = viewer), All Cases, Needs Attention, Completed, Admin / Monitoring. Each queue has a keyword search and status / assignee / customer / updated filters, all applied in Python over the store's list. "Needs Attention" is derived, not stored: open cases that are NEEDS_INFO, FAILED or REWORK_REQUESTED, or whose pricing needs a decision or carried warnings. Admin reports case counts by status, failed cases with their error events, the schema and policy versions, and catalog record counts. "View as" segmented control replaces roles/auth.
 
 ### 4.4 Original RFQ
 Shown from `case.source` when present; cases seeded from structured requests have `source = None` and show the request only.
@@ -451,6 +459,82 @@ No generic pipeline/step framework, plugin registry, or abstract Agent class. No
 speculative config, migrations, auth, async, or queues. No pricing math in the UI,
 prompts, or workflow. No LLM output on a case without validation.
 ```
+
+---
+
+## 6a. Reviewer-portal decisions, and what was deliberately left out
+
+Recorded so they are not re-litigated. Raised while reviewing the built portal; the
+reasoning matters more than the verdicts.
+
+**Decided and built**
+
+- **Rejection needs a reason.** `RejectionReason` (price / credit / unavailable /
+  customer withdrew / other), required by `workflow.apply_review` when the action is
+  REJECT — enforced there rather than by a model validator, so decisions stored before
+  the field existed keep loading. Admin groups rejected cases by it, which free text
+  could not answer.
+- **No LLM control in the sidebar.** Whether the reviewer summary uses the LLM is a
+  deployment decision (on when `OPENAI_API_KEY` is set), not a per-review one. A
+  reviewer has no basis to decide it, and it can never change a price or a status, so
+  offering it only implied that it could. Admin reports which mode is live. The
+  `use_llm=` parameter stays on the workflow functions — tests and seeding need it.
+
+- **"Ask AI to Revise" renamed to "Send back."** The mockup's label was imprecise: the
+  dialog also re-runs deterministic pricing and can ask the customer, neither of which
+  is AI. It was initially judged not worth the churn, then renamed after it confused
+  its own designer twice — the clearest available evidence that a cold reviewer would
+  fare worse. The distinction the label now carries: **Edit** means the *facts* are
+  wrong, so you change data and the system re-prices; **Send back** means the facts are
+  right but the *output* is not, so you change nothing and the system redoes its work.
+
+**Deliberately not built**
+
+- **Extending Edit to `competitor_price` / `requested_unit_price` /
+  `requested_discount_pct`.** These are the fields a reviewer would want when a
+  customer cites a competitor quote or a promised discount. Left out to keep the edit
+  surface small and well away from the no-price-overrides line. Note that free text can
+  never drive pricing: the engine reads only `customer_id`, `contract_months`,
+  `requested_discount_pct` and the per-line `product_id` / `quantity` /
+  `requested_unit_price` / `competitor_price`, plus the catalog and `policy.yaml`. A
+  comment asking for a discount is history, not an input.
+- **Labelling Approve as "send counter at $X" on a counter-recommended case.** Worth
+  knowing that approving such a case sends *our* counter rather than accepting the
+  customer's price, but not worth the extra UI state.
+- **Reopening a rejected case, and any negotiation loop.** APPROVED and REJECTED stay
+  terminal. Reopening would change a stated invariant and is a team decision; a
+  negotiation loop (customer replies, quote versions, multiple rounds) is a subsystem,
+  not a feature, and is out of MVP scope.
+
+**Known limitation.** `case_events` is append-only and survives everything, but it
+stores event *messages*, not snapshots. After a re-price the previous `PricingDecision`
+is gone — the event text retains the old totals, but the full prior breakdown cannot be
+reconstructed. That is the "no event sourcing" call in §3; a case cannot be replayed.
+
+### Open questions, raised while reviewing the running portal
+
+Not decided, not scheduled. Recorded so the reasoning survives.
+
+1. **More than one reviewer.** Today `assigned_to` is set once from `DEFAULT_REVIEWER`
+   and never changes; "View as" is a display filter over it. Real multi-reviewer working
+   needs assignment or routing *and* identity, and authentication is out of scope (§0).
+   So this cannot be answered properly without reopening that decision — which is the
+   honest answer, not an oversight. Decide whether the demo needs to *look* multi-user
+   (a reassign control) or whether one reviewer is enough to tell the story.
+2. **Who should see Admin / Monitoring.** Every viewer can open it today. Hiding it
+   unless the viewer is Manager is about three lines, but it would be a demo affordance
+   and not access control — anyone can pick Manager from the dropdown. Worth doing only
+   if the demo should *appear* role-aware; worth saying out loud that it would not be.
+3. **Processing Timeline length.** Partly addressed: the Business View now shows
+   milestones only (status changes plus each pricing run) and the Technical Trace keeps
+   every event. If a case goes through many rework rounds even the milestone list grows;
+   revisit only if that actually happens in practice.
+4. **Live LLM verification.** `explain/` is covered by tests with an injected fake
+   client, but no call has ever been made against the real API. The failure mode is
+   quiet by design: any error returns the deterministic fallback, so a misconfigured
+   client produces a plausible summary rather than an error. Run it once with a real key
+   before the demo; the Admin card now counts `generated_by` so a silent fallback is
+   visible rather than inferred from whether a key happens to be set.
 
 ---
 

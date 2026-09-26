@@ -10,12 +10,20 @@ import pytest
 
 from quote_workflow.catalog.resolution import resolve
 from quote_workflow.contracts.common import Address
-from quote_workflow.contracts.enums import CaseStatus, PricingStatus, ReviewAction
+from quote_workflow.contracts.enums import CaseStatus, PricingStatus, RejectionReason, ReviewAction
 from quote_workflow.contracts.quote_request import QuoteLine, QuoteRequest
 from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.source import RfqSource
 from quote_workflow.storage.sqlite_store import SqliteCaseStore
-from quote_workflow.workflow import apply_review, create_case, create_case_from_request, rerun, submit_request
+from quote_workflow.workflow import (
+    apply_edit,
+    apply_review,
+    create_case,
+    create_case_from_request,
+    price_and_summarize,
+    rerun,
+    submit_request,
+)
 from quote_workflow.workflow.status import InvalidTransition, check_transition
 
 AS_OF = date(2026, 9, 5)
@@ -47,7 +55,14 @@ def _complete_request(built_db) -> QuoteRequest:
 
 
 def _decision(action: ReviewAction, comment: str | None = None) -> ReviewDecision:
-    return ReviewDecision(action=action, reviewer="Sarah", comment=comment, decided_at=datetime.now(UTC))
+    """A reviewer's decision; a rejection always carries a reason, as apply_review requires."""
+    return ReviewDecision(
+        action=action,
+        reviewer="Sarah",
+        comment=comment,
+        rejection_reason=RejectionReason.PRICE if action == ReviewAction.REJECT else None,
+        decided_at=datetime.now(UTC),
+    )
 
 
 def test_complete_request_is_priced_summarized_and_ready(built_db, store):
@@ -115,7 +130,7 @@ def test_approve_builds_quotation_and_reject_does_not(built_db, store):
     assert approved.quotation.valid_until == date(2026, 10, 5)
     assert approved.quotation.total == pytest.approx(300.0)
     assert approved.quotation.shipping_address == ADDRESS
-    assert "Superhero action jacket (Blue) M" in approved.quotation.body_markdown
+    assert "Superhero action jacket (Blue) M" in approved.quotation.body
     assert approved.quotation.notes == "Looks good"
     assert approved.events[-1].message.endswith("quotation Q-2026-Q-4 generated")
 
@@ -170,6 +185,131 @@ def test_case_with_source_keeps_the_original_rfq(store):
     case = create_case(store, source=source, assigned_to="John")
     assert case.status == CaseStatus.RECEIVED and case.assigned_to == "John"
     assert store.get(case.case_id).source.body_text == "20 launchers please"
+
+
+# --- reviewer edits ------------------------------------------------------------
+
+
+def test_edit_completes_a_needs_info_case_prices_it_and_persists(built_db, store, tmp_path):
+    partial = _complete_request(built_db).model_copy(update={"shipping_address": None})
+    case = create_case_from_request(store, built_db, partial, case_id="Q-E1", as_of_date=AS_OF, use_llm=False)
+    assert case.status == CaseStatus.NEEDS_INFO
+
+    edited = apply_edit(
+        store,
+        built_db,
+        "Q-E1",
+        partial.model_copy(update={"shipping_address": ADDRESS}),
+        editor="Sarah",
+        as_of_date=AS_OF,
+        use_llm=False,
+    )
+
+    assert edited.status == CaseStatus.READY_FOR_REVIEW
+    assert edited.pricing is not None
+    assert edited.request.shipping_address == ADDRESS
+    edit_events = [e for e in edited.events if e.stage == "review"]
+    assert len(edit_events) == 1
+    assert edit_events[0].message == "Sarah edited the request: shipping address"
+
+    # survives a fresh connection to the same database file
+    reopened = SqliteCaseStore(tmp_path / "cases.db")
+    try:
+        assert reopened.get("Q-E1").status == CaseStatus.READY_FOR_REVIEW
+    finally:
+        reopened.close()
+
+
+def test_edit_that_changes_a_quantity_reprices(built_db, store):
+    request = _complete_request(built_db)
+    create_case_from_request(store, built_db, request, case_id="Q-E2", as_of_date=AS_OF, use_llm=False)
+
+    doubled = request.model_copy(update={"lines": [request.lines[0].model_copy(update={"quantity": 20})]})
+    edited = apply_edit(store, built_db, "Q-E2", doubled, editor="Sarah", as_of_date=AS_OF, use_llm=False)
+
+    # list price is $30.00/unit and the volume ladder starts at 50 units, so 20 x $30.00
+    assert edited.status == CaseStatus.READY_FOR_REVIEW
+    assert edited.pricing.lines[0].quantity == 20
+    assert edited.pricing.total_quoted_value == pytest.approx(600.0)
+    assert edited.events[-1].to_status == CaseStatus.READY_FOR_REVIEW
+
+
+def test_edit_without_changes_records_nothing(built_db, store):
+    request = _complete_request(built_db)
+    case = create_case_from_request(store, built_db, request, case_id="Q-E3", as_of_date=AS_OF, use_llm=False)
+    before = len(case.events)
+
+    unchanged = apply_edit(store, built_db, "Q-E3", request, editor="Sarah", as_of_date=AS_OF, use_llm=False)
+
+    assert len(unchanged.events) == before
+    assert unchanged.status == CaseStatus.READY_FOR_REVIEW
+
+
+def test_edit_is_refused_once_a_case_is_decided(built_db, store):
+    request = _complete_request(built_db)
+    create_case_from_request(store, built_db, request, case_id="Q-E4", as_of_date=AS_OF, use_llm=False)
+    apply_review(store, "Q-E4", _decision(ReviewAction.APPROVE), today=AS_OF)
+
+    with pytest.raises(ValueError, match="approved"):
+        apply_edit(store, built_db, "Q-E4", request, editor="Sarah", use_llm=False)
+
+
+def test_a_rejection_needs_a_reason_and_records_it(built_db, store):
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id="Q-why", as_of_date=AS_OF, use_llm=False
+    )
+    reasonless = ReviewDecision(action=ReviewAction.REJECT, reviewer="Sarah", decided_at=datetime.now(UTC))
+
+    with pytest.raises(ValueError, match="rejection needs a reason"):
+        apply_review(store, "Q-why", reasonless)
+    assert store.get("Q-why").status == CaseStatus.READY_FOR_REVIEW  # nothing was written
+
+    rejected = apply_review(store, "Q-why", _decision(ReviewAction.REJECT, "Held at 12.00"))
+    assert rejected.status == CaseStatus.REJECTED
+    assert rejected.review.rejection_reason == RejectionReason.PRICE
+    assert rejected.events[-1].message == "Sarah: reject (price) - Held at 12.00"
+
+    # an approval needs no reason, and carries none
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id="Q-ok", as_of_date=AS_OF, use_llm=False
+    )
+    assert apply_review(store, "Q-ok", _decision(ReviewAction.APPROVE), today=AS_OF).review.rejection_reason is None
+
+
+def test_a_decision_stored_before_the_reason_field_existed_still_loads():
+    """Contract rule: new fields are Optional with defaults so stored cases keep loading."""
+    old = ReviewDecision.model_validate(
+        {"action": "reject", "reviewer": "Sarah", "comment": "too cheap", "decided_at": "2026-09-01T10:00:00Z"}
+    )
+    assert old.rejection_reason is None
+
+
+@pytest.mark.parametrize("action", [ReviewAction.APPROVE, ReviewAction.REJECT])
+def test_a_decided_case_keeps_its_pricing_record_untouched(built_db, store, action):
+    """Regression: re-running a decided case used to overwrite its PricingDecision
+    and append events before the transition check refused it, so an approved case
+    could end up showing a different price than the quotation that was sent."""
+    case_id = f"Q-final-{action.value}"
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id=case_id, as_of_date=AS_OF, use_llm=False
+    )
+    decided = apply_review(store, case_id, _decision(action), today=AS_OF)
+    priced_at, events = decided.pricing.priced_at, len(decided.events)
+
+    for attempt in (
+        lambda: rerun(store, built_db, case_id, as_of_date=AS_OF, use_llm=False),
+        lambda: price_and_summarize(store, built_db, case_id, as_of_date=AS_OF, use_llm=False),
+        lambda: submit_request(store, built_db, case_id, decided.request, as_of_date=AS_OF, use_llm=False),
+    ):
+        with pytest.raises(InvalidTransition, match="are final"):
+            attempt()
+
+    after = store.get(case_id)
+    assert after.status == decided.status
+    assert after.pricing.priced_at == priced_at, "the stored PricingDecision was replaced"
+    assert len(after.events) == events, "a refused re-run still wrote to the audit trail"
+    if action == ReviewAction.APPROVE:
+        assert after.quotation.total == after.pricing.total_quoted_value
 
 
 def test_transition_table():

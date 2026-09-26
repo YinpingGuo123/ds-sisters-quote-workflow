@@ -31,12 +31,17 @@ reviewer summary is the code-built fallback and prices/statuses are identical.
 python scripts/build_db.py          # data/reference/*.csv -> data/db/catalog.db
 python scripts/seed_cases.py        # data/samples/requests.json -> data/db/cases.db (8 demo cases)
 python scripts/run_case.py --all    # list cases; `run_case.py Q-below-floor` shows one in detail
+python scripts/run_rework.py        # cases a reviewer sent back; `--run` carries the rework out
 .venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
 ```
 
-The portal seeds the demo cases itself when the store is empty. Pick a case in
-the queue, read the pricing result / rationale / AI summary / warnings, then
-Approve, Reject or Request information. Approving renders the quotation.
+The portal seeds the demo cases itself when the store is empty. Navigate with My
+Queue / All Cases / Needs Attention / Completed / Admin, filter or search the
+queue, pick a case, read the extracted
+data, the deterministic pricing recommendation, the AI reviewer summary and the
+warnings, then Approve, Edit, Reject or Request information. Editing a case
+re-runs pricing; approving stores the quotation. A draft quote is previewable
+before any decision.
 
 ## Test
 
@@ -60,13 +65,15 @@ src/quote_workflow/
   intake/                     RfqSource -> complete QuoteRequest             (owner: Jenny)
   pricing/                    deterministic engine + policy; service.price_request() -> PricingDecision
   explain/                    LLM reviewer summary, grounded + validated, with fallback
-  quotation/                  build_quotation() -> Quotation + markdown body
+  quotation/                  build_quotation() -> Quotation; renderers/ markdown today, HTML/PDF by adding one entry
   storage/                    SqliteCaseStore: `cases` (current state) + `case_events` (history)
   workflow/                   the composer: submit_request / price_and_summarize / apply_review
   observability/              tracing setup                                   (owner: Rea)
   evaluation/                 evaluation                                      (owner: Rea)
-app/                          Streamlit portal: queue, case detail, technical trace
-scripts/                      build_db, seed_cases, run_case (+ ingest_inbox, run_eval by their owners)
+app/                          Streamlit portal: left navigation (screens/), queue, case detail
+                              cards, processing timeline, technical trace
+scripts/                      build_db, seed_cases, run_case, run_rework
+                              (+ ingest_inbox, run_eval by their owners)
 tests/                        pytest; temp SQLite fixtures, no network, LLM clients mocked
 ```
 

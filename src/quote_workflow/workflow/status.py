@@ -4,6 +4,7 @@ RECEIVED ──(request incomplete)──► NEEDS_INFO ──(request completed
 RECEIVED ──(request complete + priced)─────────────────────────────► READY_FOR_REVIEW
 RECEIVED / NEEDS_INFO / READY_FOR_REVIEW ──(unhandled error)──► FAILED ──(re-run)──► RECEIVED
 READY_FOR_REVIEW ──APPROVE──► APPROVED   ──REJECT──► REJECTED   ──REQUEST_INFO──► NEEDS_INFO
+READY_FOR_REVIEW ──(reviewer asks for rework)──► REWORK_REQUESTED ──(rework run)──► READY_FOR_REVIEW
 """
 
 from __future__ import annotations
@@ -18,6 +19,14 @@ _ALLOWED: dict[CaseStatus, set[CaseStatus]] = {
         CaseStatus.REJECTED,
         CaseStatus.NEEDS_INFO,
         CaseStatus.READY_FOR_REVIEW,  # re-priced
+        CaseStatus.REWORK_REQUESTED,
+        CaseStatus.FAILED,
+    },
+    # Waiting for one of our own stages to redo its work; the reviewer cannot
+    # approve it in the meantime.
+    CaseStatus.REWORK_REQUESTED: {
+        CaseStatus.READY_FOR_REVIEW,
+        CaseStatus.NEEDS_INFO,  # the rework found the request incomplete after all
         CaseStatus.FAILED,
     },
     CaseStatus.FAILED: {CaseStatus.RECEIVED, CaseStatus.NEEDS_INFO, CaseStatus.READY_FOR_REVIEW},

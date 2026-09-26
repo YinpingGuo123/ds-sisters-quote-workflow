@@ -16,6 +16,7 @@ from quote_workflow.catalog.repository import (
     get_sales_history,
     search_customers,
     search_products,
+    table_counts,
 )
 
 AS_OF = date(2026, 9, 5)
@@ -159,3 +160,15 @@ def test_get_sales_history_ordered_most_recent_first(built_db: sqlite3.Connectio
 def test_get_sales_history_no_history_returns_empty(built_db: sqlite3.Connection):
     # customer 11 (Emily Whittle) has zero sales_history rows by design.
     assert get_sales_history(built_db, customer_id=11, product_id=1) == []
+
+
+def test_table_counts_reports_every_reference_table(built_db: sqlite3.Connection):
+    # one row per data line in data/reference/*.csv
+    assert table_counts(built_db) == {
+        "customers": 12,
+        "products": 12,
+        "customer_aliases": 7,
+        "product_aliases": 24,
+        "special_deals": 11,
+        "sales_history": 45,
+    }

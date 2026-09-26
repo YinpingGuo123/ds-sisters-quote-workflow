@@ -21,10 +21,12 @@ from quote_workflow.contracts.enums import CaseStatus
 from quote_workflow.contracts.pricing import PricingDecision
 from quote_workflow.contracts.quotation import Quotation
 from quote_workflow.contracts.quote_request import QuoteRequest
-from quote_workflow.contracts.review import ReviewDecision, ReviewerSummary
+from quote_workflow.contracts.review import ReviewDecision, ReviewerSummary, ReworkRequest
 from quote_workflow.contracts.source import RfqSource
 
-SCHEMA_VERSION = 1
+# 2: Quotation.body_markdown became body + body_format (renderer seam).
+# No migrations - bump, delete data/db/cases.db, reseed.
+SCHEMA_VERSION = 2
 
 
 class CaseEvent(BaseModel):
@@ -49,6 +51,7 @@ class QuoteCase(BaseModel):
     pricing: PricingDecision | None = None
     summary: ReviewerSummary | None = None
     review: ReviewDecision | None = None
+    rework: ReworkRequest | None = None  # the open (or last) rework request
     quotation: Quotation | None = None
 
     evaluation_ref: str | None = None  # id/URL of an evaluation record; its shape is evaluation's

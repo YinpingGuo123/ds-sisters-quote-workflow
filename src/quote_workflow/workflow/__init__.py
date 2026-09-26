@@ -7,6 +7,9 @@ Entry points:
 - ``create_case_from_request(...)``                    create + submit in one call (seeding, tests, evaluation)
 - ``price_and_summarize(store, conn, case_id)``       pricing -> reviewer summary -> READY_FOR_REVIEW
 - ``apply_review(store, case_id, decision)``          approve (builds the quotation) / reject / request info
+- ``apply_edit(store, conn, case_id, request, editor)`` reviewer correction -> submit_request -> re-priced
+- ``request_rework(store, case_id, target, reason, by)`` park the case in REWORK_REQUESTED
+- ``run_rework(store, conn, case_id)``                carry the rework out -> back to READY_FOR_REVIEW
 - ``rerun(store, conn, case_id)``                     re-run a FAILED case from its stored request
 """
 
@@ -18,13 +21,16 @@ from quote_workflow.workflow.pipeline import (
     rerun,
     submit_request,
 )
-from quote_workflow.workflow.review import apply_review
+from quote_workflow.workflow.review import apply_edit, apply_review, request_rework, run_rework
 from quote_workflow.workflow.status import InvalidTransition, check_transition, is_terminal
 
 __all__ = [
     "InvalidTransition",
+    "apply_edit",
     "apply_review",
     "check_transition",
+    "request_rework",
+    "run_rework",
     "create_case",
     "create_case_from_request",
     "is_terminal",

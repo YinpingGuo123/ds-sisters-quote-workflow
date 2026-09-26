@@ -23,12 +23,22 @@ from quote_workflow.explain.prompts import SYSTEM_PROMPT
 from quote_workflow.explain.validate import validate_summary
 
 
-def build_messages(request: QuoteRequest, pricing: PricingDecision) -> list[dict[str, str]]:
+def build_messages(
+    request: QuoteRequest, pricing: PricingDecision, feedback: str | None = None
+) -> list[dict[str, str]]:
     context = ""
     if request.source_text:
         context += f'\n\nCustomer\'s message:\n"""\n{request.source_text.strip()}\n"""'
     if request.notes:
         context += f"\n\nNotes from intake: {request.notes}"
+    if feedback:
+        # A reviewer asked for this summary to be rewritten. It steers the wording
+        # only - the facts below are still the sole source of every number.
+        context += (
+            f"\n\nThe reviewer was not satisfied with the previous summary and asked for a revision:\n"
+            f'"""\n{feedback.strip()}\n"""\n'
+            "Address that request. Do not change, add or infer any number."
+        )
     user = f"Pricing facts (do not change any number):\n\n{build_facts(request, pricing)}{context}"
     return [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
 
@@ -46,11 +56,14 @@ def summarize(
     client: Any | None = None,
     model: str | None = None,
     use_llm: bool = True,
+    feedback: str | None = None,
 ) -> ReviewerSummary:
     """A ReviewerSummary for the case. Never raises.
 
     ``client`` is any object with ``chat.completions.parse`` (the OpenAI SDK
-    or a test double); ``use_llm=False`` skips the call entirely.
+    or a test double); ``use_llm=False`` skips the call entirely. ``feedback``
+    is a reviewer's complaint about a previous summary, used to steer the
+    wording on a rewrite - it never relaxes validation.
     """
     if not use_llm or not pricing.lines:
         return fallback_summary(request, pricing, rejected_reason=None if not use_llm else "nothing priced")
@@ -59,7 +72,7 @@ def summarize(
     try:
         client = client or _default_client()
         completion = client.chat.completions.parse(
-            model=model, messages=build_messages(request, pricing), response_format=LlmSummary
+            model=model, messages=build_messages(request, pricing, feedback), response_format=LlmSummary
         )
         candidate = completion.choices[0].message.parsed
     except Exception as exc:  # no API key, network, parse failure - all degrade to the fallback

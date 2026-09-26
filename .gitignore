@@ -8,3 +8,4 @@ data/db/
 .ruff_cache/
 .streamlit/secrets.toml
 .claude/settings.local.json
+.claude/settings.json

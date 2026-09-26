@@ -18,6 +18,7 @@ class CaseStatus(StrEnum):
     RECEIVED = "received"
     NEEDS_INFO = "needs_info"
     READY_FOR_REVIEW = "ready_for_review"
+    REWORK_REQUESTED = "rework_requested"
     APPROVED = "approved"
     REJECTED = "rejected"
     FAILED = "failed"
@@ -27,6 +28,48 @@ class ReviewAction(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"
     REQUEST_INFO = "request_info"
+
+
+class RejectionReason(StrEnum):
+    """Why a quote was not sent. Required when a reviewer rejects, so the
+    completed queue can answer "why are we losing deals" instead of holding
+    free text.
+
+    ``PRICE`` means the customer will not pay what policy allows - distinct
+    from a counter, which is an ordinary approval of the engine's counter offer.
+    """
+
+    PRICE = "price"
+    CREDIT = "credit"  # customer not approved for terms
+    UNAVAILABLE = "unavailable"  # we cannot supply it
+    CUSTOMER_WITHDREW = "customer_withdrew"
+    OTHER = "other"
+
+
+class ReworkTarget(StrEnum):
+    """Which part of our own pipeline a reviewer is sending back.
+
+    Distinct from ``REQUEST_INFO``, which waits on the customer. There is no
+    INTAKE target: a case only reaches review once the request is complete, so
+    extraction that is wrong rather than missing is corrected by the reviewer
+    through ``workflow.apply_edit`` - faster and more reliable than a second
+    pass over unchanged text. Add INTAKE if and when re-extraction earns it.
+    """
+
+    PRICING = "pricing"  # re-price, e.g. after a policy change or a new as-of date
+    EXPLAIN = "explain"  # re-word the reviewer summary (the portal's "Send back")
+
+
+class QuotationFormat(StrEnum):
+    """How a quotation was rendered. The ``Quotation`` model is the source of
+    truth; a format is one view over it, produced by a renderer in
+    ``quotation.renderers``. MVP renders MARKDOWN; the others exist so a stored
+    quotation can say which renderer produced its archived body.
+    """
+
+    MARKDOWN = "markdown"
+    HTML = "html"
+    PDF = "pdf"
 
 
 class ResolutionStatus(StrEnum):
