@@ -30,6 +30,22 @@ class ReviewAction(StrEnum):
     REQUEST_INFO = "request_info"
 
 
+class RejectionReason(StrEnum):
+    """Why a quote was not sent. Required when a reviewer rejects, so the
+    completed queue can answer "why are we losing deals" instead of holding
+    free text.
+
+    ``PRICE`` means the customer will not pay what policy allows - distinct
+    from a counter, which is an ordinary approval of the engine's counter offer.
+    """
+
+    PRICE = "price"
+    CREDIT = "credit"  # customer not approved for terms
+    UNAVAILABLE = "unavailable"  # we cannot supply it
+    CUSTOMER_WITHDREW = "customer_withdrew"
+    OTHER = "other"
+
+
 class ReworkTarget(StrEnum):
     """Which part of our own pipeline a reviewer is sending back.
 

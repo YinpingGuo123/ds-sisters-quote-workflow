@@ -462,6 +462,52 @@ prompts, or workflow. No LLM output on a case without validation.
 
 ---
 
+## 6a. Reviewer-portal decisions, and what was deliberately left out
+
+Recorded so they are not re-litigated. Raised while reviewing the built portal; the
+reasoning matters more than the verdicts.
+
+**Decided and built**
+
+- **Rejection needs a reason.** `RejectionReason` (price / credit / unavailable /
+  customer withdrew / other), required by `workflow.apply_review` when the action is
+  REJECT — enforced there rather than by a model validator, so decisions stored before
+  the field existed keep loading. Admin groups rejected cases by it, which free text
+  could not answer.
+- **No LLM control in the sidebar.** Whether the reviewer summary uses the LLM is a
+  deployment decision (on when `OPENAI_API_KEY` is set), not a per-review one. A
+  reviewer has no basis to decide it, and it can never change a price or a status, so
+  offering it only implied that it could. Admin reports which mode is live. The
+  `use_llm=` parameter stays on the workflow functions — tests and seeding need it.
+
+**Deliberately not built**
+
+- **Renaming "Ask AI to Revise" to "Send back."** The label is inherited from the UI
+  mockup and is imprecise — the dialog also re-runs deterministic pricing and can ask
+  the customer, neither of which is AI. Judged not worth the churn for the MVP.
+- **Extending Edit to `competitor_price` / `requested_unit_price` /
+  `requested_discount_pct`.** These are the fields a reviewer would want when a
+  customer cites a competitor quote or a promised discount. Left out to keep the edit
+  surface small and well away from the no-price-overrides line. Note that free text can
+  never drive pricing: the engine reads only `customer_id`, `contract_months`,
+  `requested_discount_pct` and the per-line `product_id` / `quantity` /
+  `requested_unit_price` / `competitor_price`, plus the catalog and `policy.yaml`. A
+  comment asking for a discount is history, not an input.
+- **Labelling Approve as "send counter at $X" on a counter-recommended case.** Worth
+  knowing that approving such a case sends *our* counter rather than accepting the
+  customer's price, but not worth the extra UI state.
+- **Reopening a rejected case, and any negotiation loop.** APPROVED and REJECTED stay
+  terminal. Reopening would change a stated invariant and is a team decision; a
+  negotiation loop (customer replies, quote versions, multiple rounds) is a subsystem,
+  not a feature, and is out of MVP scope.
+
+**Known limitation.** `case_events` is append-only and survives everything, but it
+stores event *messages*, not snapshots. After a re-price the previous `PricingDecision`
+is gone — the event text retains the old totals, but the full prior breakdown cannot be
+reconstructed. That is the "no event sourcing" call in §3; a case cannot be replayed.
+
+---
+
 ## 7. Ownership gaps and remaining team decisions
 
 ### Components without an owner today

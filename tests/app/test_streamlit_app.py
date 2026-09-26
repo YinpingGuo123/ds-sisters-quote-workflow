@@ -44,6 +44,17 @@ def _cases(app: AppTest) -> set[str]:
     return set(app.dataframe[0].value["Case"])
 
 
+def _frame(app: AppTest, key_column: str) -> dict:
+    """The table whose first column is `key_column`, as {key: value}. Found by
+    its columns rather than its position, so adding a section cannot silently
+    point a test at the wrong table."""
+    for element in app.dataframe:
+        frame = element.value
+        if list(frame.columns)[0] == key_column:
+            return dict(zip(frame.iloc[:, 0], frame.iloc[:, 1], strict=True))
+    raise AssertionError(f"no table keyed by {key_column!r}; saw {[list(d.value.columns) for d in app.dataframe]}")
+
+
 def _screen(app: AppTest, name: str) -> AppTest:
     app.switch_page(f"screens/{name}.py")
     app.run()
@@ -120,19 +131,38 @@ def test_search_and_filters_narrow_the_queue(app):
     assert any("No case matches these filters." in i.value for i in app.info)
 
 
+def test_rejecting_requires_a_reason_and_admin_groups_by_it(app):
+    case_id = "Q-buying-group-deal"
+    app.run()
+    app.session_state["selected_case"] = case_id
+    app.run()
+    # the sidebar no longer offers an LLM control - that is a deployment decision
+    assert not app.sidebar.toggle
+
+    next(b for b in app.button if b.label == "Reject").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+    reason = app.radio(f"{case_id}-reject-reason")
+    assert len(reason.options) == 5  # the dialog opened with the reason choices
+    reason.set_value(reason.options[1])  # credit
+    next(b for b in app.button if b.label == "Reject case").click().run()
+    assert not app.exception, [e.value for e in app.exception]
+
+    _screen(app, "completed")
+    assert case_id in _cases(app)
+    _screen(app, "admin")
+    assert _frame(app, "Reason") == {"credit": 1}
+
+
 def test_admin_reports_store_health_and_build_versions(app):
     app.run()
     _screen(app, "admin")
     text = _markdown_text(app)
     assert "Admin / Monitoring" in text
 
-    counts = app.dataframe[0].value  # cases per status
-    assert dict(zip(counts["Status"], counts["Cases"], strict=True)) == {"Needs Info": 2, "Ready for Review": 6}
+    assert _frame(app, "Status") == {"Needs Info": 2, "Ready for Review": 6}
     assert any(m.label == "Case schema" for m in app.metric)
     assert any(m.label == "Pricing policy" and m.value == "2026.09-v1" for m in app.metric)
-    # the catalog table is the second dataframe on the page and must not be empty
-    catalog_counts = app.dataframe[1].value
-    assert dict(zip(catalog_counts["Table"], catalog_counts["Records"], strict=True))["products"] > 0
+    assert _frame(app, "Table")["products"] > 0  # the catalog is populated
     assert not app.warning, [w.value for w in app.warning]
 
 

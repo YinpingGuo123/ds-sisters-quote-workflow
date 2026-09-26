@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from quote_workflow.contracts.enums import ReviewAction, ReworkTarget
+from quote_workflow.contracts.enums import RejectionReason, ReviewAction, ReworkTarget
 
 
 class ReviewerSummary(BaseModel):
@@ -35,6 +35,9 @@ class ReviewDecision(BaseModel):
     reviewer: str
     comment: str | None = None
     decided_at: datetime
+    # Required by ``workflow.apply_review`` when action is REJECT, but Optional
+    # here so decisions stored before the field existed keep loading.
+    rejection_reason: RejectionReason | None = None
 
 
 class ReworkRequest(BaseModel):

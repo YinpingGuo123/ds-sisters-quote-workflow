@@ -74,7 +74,8 @@ FAILED. READY_FOR_REVIEW means the request is complete and a PricingDecision exi
 Transitions happen only through `workflow/` (`submit_request`, `price_and_summarize`,
 `apply_review`, `apply_edit`, `request_rework`, `run_rework`); the portal calls those
 functions and never changes status itself.
-Reviewer actions: Approve, Edit, Ask AI to Revise, Reject. No price overrides in the MVP
+Reviewer actions: Approve, Edit, Ask AI to Revise, Reject (which requires a
+`RejectionReason`). No price overrides in the MVP
 — editing covers addresses, dates and quantities, and re-runs pricing through
 `submit_request`. Case detail shows: original RFQ, extracted data (incl. billing,
 shipping, delivery date, items), the deterministic pricing recommendation and its

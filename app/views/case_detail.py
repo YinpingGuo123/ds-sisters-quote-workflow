@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 import streamlit as st
+from resources import use_llm
 
 from quote_workflow.contracts.case import QuoteCase
 from quote_workflow.contracts.enums import CaseStatus, QuotationFormat, ReviewAction
@@ -28,6 +29,7 @@ from quote_workflow.quotation import build_quotation, renderer_for
 from quote_workflow.workflow import apply_review, rerun, run_rework
 from ui import money, pct, pricing_badge, status_badge
 from views.edit_form import render_edit_dialog, request_edit
+from views.reject_form import render_reject_dialog, request_reject
 from views.rework_form import render_revise_dialog, request_revise
 from views.timeline import render_timeline
 
@@ -252,12 +254,13 @@ def _quotation_section(case: QuoteCase) -> None:
 
 
 def _last_decision(case: QuoteCase) -> None:
-    if not case.review:
+    review = case.review
+    if not review:
         return
-    st.caption(
-        f"{case.review.action.value.replace('_', ' ').title()} by {case.review.reviewer} "
-        f"on {case.review.decided_at:%b %d, %H:%M}" + (f" - {case.review.comment}" if case.review.comment else "")
-    )
+    text = f"{review.action.value.replace('_', ' ').title()} by {review.reviewer} on {review.decided_at:%b %d, %H:%M}"
+    if review.rejection_reason:
+        text += f" · reason: {review.rejection_reason.value.replace('_', ' ')}"
+    st.caption(text + (f" - {review.comment}" if review.comment else ""))
 
 
 def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:
@@ -275,7 +278,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
         if cols[2].button("Ask AI to Revise", key=f"revise-{case.case_id}", width="stretch"):
             request_revise(case.case_id)
         if cols[3].button("Reject", key=f"reject-{case.case_id}", width="stretch"):
-            clicked = ReviewAction.REJECT
+            request_reject(case.case_id)  # the reason is required, so it is asked for in a dialog
         if clicked is not None:
             decision = ReviewDecision(
                 action=clicked, reviewer=viewer, comment=comment or None, decided_at=datetime.now(UTC)
@@ -295,7 +298,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
             "scripts/run_rework.py pick it up."
         )
         if st.button("Run rework now", type="primary", key=f"run-rework-{case.case_id}"):
-            run_rework(store, conn, case.case_id, use_llm=st.session_state.get("use_llm", False))
+            run_rework(store, conn, case.case_id, use_llm=use_llm())
             st.rerun()
     elif case.status == CaseStatus.NEEDS_INFO:
         _last_decision(case)
@@ -304,7 +307,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
             request_edit(case.case_id)
     elif case.status == CaseStatus.FAILED:
         if st.button("Re-run pipeline", key=f"rerun-{case.case_id}"):
-            rerun(store, conn, case.case_id, use_llm=st.session_state.get("use_llm", False))
+            rerun(store, conn, case.case_id, use_llm=use_llm())
             st.rerun()
     elif case.review:
         _last_decision(case)
@@ -313,6 +316,7 @@ def _actions(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer
 
     render_edit_dialog(case, store, conn, viewer)
     render_revise_dialog(case, store, viewer)
+    render_reject_dialog(case, store, viewer)
 
 
 def render_case(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, viewer: str) -> None:

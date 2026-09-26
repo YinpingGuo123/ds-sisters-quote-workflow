@@ -10,7 +10,7 @@ import pytest
 
 from quote_workflow.catalog.resolution import resolve
 from quote_workflow.contracts.common import Address
-from quote_workflow.contracts.enums import CaseStatus, PricingStatus, ReviewAction
+from quote_workflow.contracts.enums import CaseStatus, PricingStatus, RejectionReason, ReviewAction
 from quote_workflow.contracts.quote_request import QuoteLine, QuoteRequest
 from quote_workflow.contracts.review import ReviewDecision
 from quote_workflow.contracts.source import RfqSource
@@ -55,7 +55,14 @@ def _complete_request(built_db) -> QuoteRequest:
 
 
 def _decision(action: ReviewAction, comment: str | None = None) -> ReviewDecision:
-    return ReviewDecision(action=action, reviewer="Sarah", comment=comment, decided_at=datetime.now(UTC))
+    """A reviewer's decision; a rejection always carries a reason, as apply_review requires."""
+    return ReviewDecision(
+        action=action,
+        reviewer="Sarah",
+        comment=comment,
+        rejection_reason=RejectionReason.PRICE if action == ReviewAction.REJECT else None,
+        decided_at=datetime.now(UTC),
+    )
 
 
 def test_complete_request_is_priced_summarized_and_ready(built_db, store):
@@ -245,6 +252,36 @@ def test_edit_is_refused_once_a_case_is_decided(built_db, store):
 
     with pytest.raises(ValueError, match="approved"):
         apply_edit(store, built_db, "Q-E4", request, editor="Sarah", use_llm=False)
+
+
+def test_a_rejection_needs_a_reason_and_records_it(built_db, store):
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id="Q-why", as_of_date=AS_OF, use_llm=False
+    )
+    reasonless = ReviewDecision(action=ReviewAction.REJECT, reviewer="Sarah", decided_at=datetime.now(UTC))
+
+    with pytest.raises(ValueError, match="rejection needs a reason"):
+        apply_review(store, "Q-why", reasonless)
+    assert store.get("Q-why").status == CaseStatus.READY_FOR_REVIEW  # nothing was written
+
+    rejected = apply_review(store, "Q-why", _decision(ReviewAction.REJECT, "Held at 12.00"))
+    assert rejected.status == CaseStatus.REJECTED
+    assert rejected.review.rejection_reason == RejectionReason.PRICE
+    assert rejected.events[-1].message == "Sarah: reject (price) - Held at 12.00"
+
+    # an approval needs no reason, and carries none
+    create_case_from_request(
+        store, built_db, _complete_request(built_db), case_id="Q-ok", as_of_date=AS_OF, use_llm=False
+    )
+    assert apply_review(store, "Q-ok", _decision(ReviewAction.APPROVE), today=AS_OF).review.rejection_reason is None
+
+
+def test_a_decision_stored_before_the_reason_field_existed_still_loads():
+    """Contract rule: new fields are Optional with defaults so stored cases keep loading."""
+    old = ReviewDecision.model_validate(
+        {"action": "reject", "reviewer": "Sarah", "comment": "too cheap", "decided_at": "2026-09-01T10:00:00Z"}
+    )
+    assert old.rejection_reason is None
 
 
 @pytest.mark.parametrize("action", [ReviewAction.APPROVE, ReviewAction.REJECT])

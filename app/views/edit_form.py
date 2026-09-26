@@ -13,6 +13,7 @@ from __future__ import annotations
 import sqlite3
 
 import streamlit as st
+from resources import use_llm
 
 from quote_workflow.contracts.case import QuoteCase
 from quote_workflow.contracts.common import Address
@@ -147,7 +148,7 @@ def edit_dialog(case: QuoteCase, store: CaseStore, conn: sqlite3.Connection, vie
             edited,
             editor=viewer,
             note=note.strip() or None,
-            use_llm=st.session_state.get("use_llm", False),
+            use_llm=use_llm(),
         )
     except ValueError as exc:  # a case decided in another tab, a request that cannot be re-run
         st.error(str(exc))

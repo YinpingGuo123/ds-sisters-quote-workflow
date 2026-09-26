@@ -41,6 +41,10 @@ def apply_review(store: CaseStore, case_id: str, decision: ReviewDecision, today
     case = store.get(case_id)
     if case.status != CaseStatus.READY_FOR_REVIEW:
         raise ValueError(f"case {case_id} is {case.status.value}, not ready for review")
+    # Enforced here rather than on the model, so decisions stored before the
+    # field existed still load; only new rejections must carry a reason.
+    if decision.action == ReviewAction.REJECT and decision.rejection_reason is None:
+        raise ValueError("a rejection needs a reason")
     target = REVIEW_OUTCOME[decision.action]
     check_transition(case.status, target)
 
@@ -49,7 +53,10 @@ def apply_review(store: CaseStore, case_id: str, decision: ReviewDecision, today
         case.quotation = build_quotation(case, today=today)
 
     now = datetime.now(UTC)
-    message = f"{decision.reviewer}: {decision.action.value}" + (f" - {decision.comment}" if decision.comment else "")
+    message = f"{decision.reviewer}: {decision.action.value}"
+    if decision.rejection_reason:
+        message += f" ({decision.rejection_reason.value})"
+    message += f" - {decision.comment}" if decision.comment else ""
     if case.quotation is not None:
         message += f" | quotation {case.quotation.quote_number} generated"
     event = CaseEvent(at=now, stage="review", message=message, from_status=case.status, to_status=target)

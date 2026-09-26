@@ -8,6 +8,7 @@ connection and one store per app process, not per rerun.
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import streamlit as st
@@ -44,6 +45,17 @@ def store() -> SqliteCaseStore:
 def viewer() -> str:
     """Who the portal is being viewed as; set by the sidebar control."""
     return st.session_state.get("viewer") or default_reviewer()
+
+
+def use_llm() -> bool:
+    """Whether re-runs may call the LLM for the reviewer summary.
+
+    A deployment decision, not a per-review one: on whenever a key is
+    configured. Pricing is deterministic either way, so this can never change
+    a price or a status - which is exactly why a reviewer has no basis for
+    deciding it, and why it is not a control in the sidebar.
+    """
+    return bool(os.environ.get("OPENAI_API_KEY"))
 
 
 def reviewers() -> list[str]:

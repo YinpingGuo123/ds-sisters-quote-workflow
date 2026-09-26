@@ -69,11 +69,6 @@ with st.sidebar:
     options = [*reviewers(), MANAGER]
     chosen = st.segmented_control("View as", options, default=options[0], key="view_as")
     st.session_state["viewer"] = chosen or options[0]
-    st.session_state["use_llm"] = st.toggle(
-        "Use LLM for reviewer summary on re-runs",
-        value=bool(os.environ.get("OPENAI_API_KEY")),
-        help="Pricing is always deterministic. This only affects the AI reviewer summary.",
-    )
     st.caption(f"{store().count()} cases in store")
 
 navigation.run()

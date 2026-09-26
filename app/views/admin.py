@@ -11,7 +11,7 @@ from collections import Counter
 
 import pandas as pd
 import streamlit as st
-from resources import catalog, store
+from resources import catalog, store, use_llm
 
 from quote_workflow.catalog.repository import table_counts
 from quote_workflow.config import openai_model
@@ -60,13 +60,30 @@ def _failures() -> None:
                     st.error(f"[{event.stage}] {event.message}")
 
 
+def _rejections() -> None:
+    """Why quotes were not sent - the question the free-text comment could not answer."""
+    st.subheader("Rejections")
+    rejected = store().list(status=CaseStatus.REJECTED)
+    if not rejected:
+        st.caption("No rejected cases.")
+        return
+    counts = Counter(
+        case.review.rejection_reason.value.replace("_", " ") if case.review and case.review.rejection_reason else "-"
+        for case in rejected
+    )
+    rows = [{"Reason": reason, "Cases": count} for reason, count in counts.most_common()]
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    if counts.get("-"):
+        st.caption(f"{counts['-']} rejected before a reason was recorded.")
+
+
 def _build_info() -> None:
     st.subheader("Build")
     policy = load_policy()
     cols = st.columns(4)
     cols[0].metric("Case schema", SCHEMA_VERSION)
     cols[1].metric("Pricing policy", policy.version)
-    cols[2].metric("Reviewer summary", "LLM" if st.session_state.get("use_llm") else "fallback")
+    cols[2].metric("Reviewer summary", "LLM" if use_llm() else "fallback")
     cols[3].metric("Model", openai_model())
     st.caption(
         "Pricing is deterministic in every configuration. The reviewer-summary setting only "
@@ -90,6 +107,7 @@ def render_admin() -> None:
     st.subheader("Admin / Monitoring")
     st.caption("Store health and what this build is running. Read-only.")
     _case_health()
+    _rejections()
     _failures()
     _build_info()
     _catalog_info()
