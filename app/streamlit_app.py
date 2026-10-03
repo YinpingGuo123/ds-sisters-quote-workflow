@@ -22,6 +22,12 @@ def _load_secrets_into_env() -> None:
     as environment variables, so ``config.py`` sees one set of names. Must run
     before any quote_workflow import that reads the environment."""
     try:
+        from dotenv import load_dotenv
+
+        load_dotenv(override=True)  # .env wins over a stale shell OPENAI_API_KEY
+    except ImportError:
+        pass
+    try:
         st.secrets.load_if_toml_exists()
     except Exception:  # a malformed secrets file must not take the page down
         pass
@@ -31,6 +37,7 @@ _load_secrets_into_env()
 
 from resources import MANAGER, check_inbox, reviewers, store  # noqa: E402
 
+from quote_workflow.contracts.enums import CaseStatus  # noqa: E402
 from quote_workflow.intake import mailbox_label  # noqa: E402
 from ui import STATUS_LABEL  # noqa: E402
 
@@ -80,8 +87,14 @@ with st.sidebar:
         with st.spinner("Reading the RFQ mailbox..."):
             new_cases = check_inbox()
         if new_cases:
-            listed = ", ".join(f"{case.case_id} ({STATUS_LABEL[case.status]})" for case in new_cases)
-            st.toast(f"{len(new_cases)} new case(s): {listed}", icon=":material/mark_email_unread:")
+            failed = [case for case in new_cases if case.status == CaseStatus.FAILED]
+            ok = [case for case in new_cases if case.status != CaseStatus.FAILED]
+            if ok:
+                listed = ", ".join(f"{case.case_id} ({STATUS_LABEL[case.status]})" for case in ok)
+                st.toast(f"{len(ok)} new case(s): {listed}", icon=":material/mark_email_unread:")
+            if failed:
+                listed = ", ".join(case.case_id for case in failed)
+                st.error(f"Intake failed for {len(failed)} case(s): {listed}")
         else:
             st.toast("No new RFQs in the mailbox.", icon=":material/inbox:")
     st.caption(mailbox_label())
