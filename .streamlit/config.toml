@@ -1,0 +1,4 @@
+# The QuoteWise logo is navy on transparent and is only legible on a light
+# background, so the portal does not follow the viewer's dark-mode setting.
+[theme]
+base = "light"

@@ -13,7 +13,7 @@ import sqlite3
 
 import streamlit as st
 
-from quote_workflow import demo_inbox as inbox  # the mock; swap for `intake as inbox` when it lands
+from quote_workflow import intake as inbox
 from quote_workflow.catalog.build import ensure_database
 from quote_workflow.catalog.connection import get_connection
 from quote_workflow.config import default_reviewer

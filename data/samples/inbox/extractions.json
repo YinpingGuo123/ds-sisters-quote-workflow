@@ -1,0 +1,59 @@
+{
+  "active-deal.txt": {
+    "customer_name": "Tailspin Toys (Head Office)",
+    "lines": [{"product_name": "USB missile launcher (Green)", "quantity": 20}]
+  },
+  "alias-and-history.txt": {
+    "customer_name": "WT Retail",
+    "lines": [{"product_name": "RC toy sedan car with remote control (Black) 1/50 scale", "quantity": 40}],
+    "notes": "Customer asks to match what they paid in April."
+  },
+  "ambiguous-email.txt": {
+    "customer_name": "Tailspin Toys (Avenal, CA)",
+    "contract_months": 24,
+    "requested_discount_pct": 15,
+    "lines": [
+      {"product_name": "DBA joke mug - SELECT caffeine FROM mug (Black)", "quantity": 200, "competitor_price": 11},
+      {"product_name": "RC big wheel monster truck with remote control (Black) 1/50 scale", "quantity": 40}
+    ],
+    "notes": "Customer mentions a competitor quote of $11 on the mugs."
+  },
+  "competitor-price.txt": {
+    "customer_name": "Jayanta Thakur",
+    "lines": [{"product_name": "Pack of 12 action figures (variety)", "quantity": 30, "competitor_price": 13}],
+    "notes": "Customer mentions a competing offer at $13 per pack."
+  },
+  "discount-above-cap.txt": {
+    "customer_name": "Eric Torres",
+    "lines": [{"product_name": "Office cube periscope (Black)", "quantity": 50, "requested_unit_price": 15}]
+  },
+  "discount-within-policy.txt": {
+    "customer_name": "Tailspin Toys (Head Office)",
+    "requested_discount_pct": 15,
+    "lines": [{"product_name": "USB missile launcher (Green)", "quantity": 200}]
+  },
+  "expired-deal.txt": {
+    "customer_name": "Eric Torres",
+    "lines": [{"product_name": "Office cube periscope (Black)", "quantity": 10}],
+    "notes": "Customer references a special rate from last year."
+  },
+  "missing-quantity.txt": {
+    "customer_name": "Eric Torres",
+    "lines": [{"product_name": "Office cube periscope (Black)"}],
+    "clarification_questions": ["How many Office cube periscopes (Black) would you like to order?"]
+  },
+  "multi-product.txt": {
+    "customer_name": "Tailspin Toys (Head Office)",
+    "contract_months": 12,
+    "lines": [
+      {"product_name": "USB missile launcher (Green)", "quantity": 100},
+      {"product_name": "Office cube periscope (Black)", "quantity": 50},
+      {"product_name": "DBA joke mug - SELECT caffeine FROM mug (Black)", "quantity": 200, "competitor_price": 10}
+    ],
+    "notes": "Customer mentions mugs offered at $10 elsewhere."
+  },
+  "unknown-product.txt": {
+    "customer_name": "Tailspin Toys (Head Office)",
+    "lines": [{"product_name": "Deluxe Rocket Backpack", "quantity": 5}]
+  }
+}

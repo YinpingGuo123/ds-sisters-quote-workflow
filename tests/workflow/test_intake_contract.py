@@ -20,14 +20,17 @@ from pathlib import Path
 
 import pytest
 
-from quote_workflow import demo_inbox
+from quote_workflow import demo_inbox, intake
 from quote_workflow.catalog.repository import get_customer_by_id, get_product_by_id
 from quote_workflow.contracts.enums import CaseStatus, ResolutionStatus
 from quote_workflow.contracts.quote_request import QuoteRequest
 from quote_workflow.storage.sqlite_store import SqliteCaseStore
 from quote_workflow.workflow import ingest_sources
 
-IMPLEMENTATIONS = [pytest.param(demo_inbox, id="demo_inbox")]
+IMPLEMENTATIONS = [
+    pytest.param(demo_inbox, id="demo_inbox"),
+    pytest.param(intake, id="intake"),
+]
 
 
 @pytest.fixture

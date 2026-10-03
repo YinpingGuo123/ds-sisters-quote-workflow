@@ -235,11 +235,11 @@ def test_check_inbox_turns_new_emails_into_cases_once(app):
 
     next(b for b in app.sidebar.button if b.label == "Check inbox").click().run()
     assert not app.exception, [e.value for e in app.exception]
-    assert len(app.dataframe[0].value) == 11  # the 3 demo emails, assigned to the default reviewer
-    assert "3 new case(s)" in app.toast[0].value
+    assert len(app.dataframe[0].value) == 18  # 10 inbox emails + 8 seeded demo cases
+    assert "10 new case(s)" in app.toast[0].value
 
     next(b for b in app.sidebar.button if b.label == "Check inbox").click().run()
-    assert len(app.dataframe[0].value) == 11
+    assert len(app.dataframe[0].value) == 18
     assert "No new RFQs" in app.toast[0].value
 
 

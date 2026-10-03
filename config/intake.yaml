@@ -1,0 +1,7 @@
+# Company RFQ intake mailbox. Customers send quote requests to this address.
+mailbox:
+  address: agenttesting986@gmail.com
+  imap:
+    host: imap.gmail.com
+    port: 993
+    folder: INBOX
